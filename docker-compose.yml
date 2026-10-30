@@ -1,6 +1,25 @@
-version: '3.8'
-
 services:
+  # ---------------------------------------------------------------------------
+  # NGINX Reverse Proxy & Gateway
+  # ---------------------------------------------------------------------------
+  nginx:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.nginx
+    ports:
+      - "80:80"
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - commerce-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Next.js 16 Frontend Web Application
+  # ---------------------------------------------------------------------------
   web:
     build:
       context: .
@@ -8,40 +27,138 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+      NODE_ENV: development
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost/api
     volumes:
       - ./apps/web:/app/apps/web
       - ./packages:/app/packages
-    depends_on:
-      - api
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
+    networks:
+      - commerce-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Laravel 13 Modular REST API (PHP 8.3)
+  # ---------------------------------------------------------------------------
   api:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.api
+      target: dev
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      - APP_ENV=local
-      - APP_DEBUG=true
-      - DB_CONNECTION=mysql
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_DATABASE=clothing_commerce
-      - DB_USERNAME=sail
-      - DB_PASSWORD=password
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      APP_ENV: local
+      APP_DEBUG: "true"
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: clothing_commerce
+      DB_USERNAME: sail
+      DB_PASSWORD: password
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: secret_redis_pass
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+    volumes:
+      - ./apps/api:/var/www/html
+      - api_storage:/var/www/html/storage
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - commerce-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Laravel Queue Worker
+  # ---------------------------------------------------------------------------
+  queue:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.api
+      target: dev
+    command: ["php", "artisan", "queue:work", "redis", "--sleep=3", "--tries=3", "--max-time=3600"]
+    env_file:
+      - .env
+    environment:
+      APP_ENV: local
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: clothing_commerce
+      DB_USERNAME: sail
+      DB_PASSWORD: password
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: secret_redis_pass
+      QUEUE_CONNECTION: redis
     volumes:
       - ./apps/api:/var/www/html
     depends_on:
-      - mysql
-      - redis
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - commerce-network
+    restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Laravel Scheduler Runner
+  # ---------------------------------------------------------------------------
+  scheduler:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.api
+      target: dev
+    command: ["php", "artisan", "schedule:work"]
+    env_file:
+      - .env
+    environment:
+      APP_ENV: local
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: clothing_commerce
+      DB_USERNAME: sail
+      DB_PASSWORD: password
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: secret_redis_pass
+    volumes:
+      - ./apps/api:/var/www/html
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - commerce-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # MySQL 8 Relational Database
+  # ---------------------------------------------------------------------------
   mysql:
     image: mysql:8.0
-    restart: unless-stopped
     ports:
       - "3306:3306"
     environment:
@@ -51,15 +168,50 @@ services:
       MYSQL_PASSWORD: password
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./infrastructure/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+      - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - commerce-network
+    restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Redis 7 In-Memory Cache & Message Broker
+  # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+      - ./infrastructure/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "secret_redis_pass", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - commerce-network
+    restart: unless-stopped
 
+# -----------------------------------------------------------------------------
+# Persistent Volumes & Networks
+# -----------------------------------------------------------------------------
 volumes:
   mysql_data:
+    driver: local
   redis_data:
+    driver: local
+  api_storage:
+    driver: local
+
+networks:
+  commerce-network:
+    driver: bridge

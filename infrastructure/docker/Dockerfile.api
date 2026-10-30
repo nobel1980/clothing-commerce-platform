@@ -1,0 +1,78 @@
+# -----------------------------------------------------------------------------
+# PHP 8.3 FPM / CLI Production Image for Laravel 13
+# -----------------------------------------------------------------------------
+FROM php:8.3-fpm-alpine AS base
+
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    git \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    icu-dev \
+    oniguruma-dev \
+    supervisor \
+    linux-headers \
+    $PHPIZE_DEPS && \
+    docker-php-ext-configure gd --with-freetype --with-jpeg && \
+    docker-php-ext-install -j$(nproc) \
+        pdo_mysql \
+        bcmath \
+        opcache \
+        pcntl \
+        intl \
+        zip \
+        mbstring \
+        gd && \
+    pecl install redis && \
+    docker-php-ext-enable redis && \
+    apk del $PHPIZE_DEPS
+
+# Install Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+# Security & Permissions: Ensure www-data ownership
+RUN mkdir -p /var/www/html/storage /var/www/html/bootstrap/cache /var/log/supervisor && \
+    chown -R www-data:www-data /var/www/html /var/log/supervisor
+
+# Production PHP settings
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" && \
+    sed -i 's/upload_max_filesize = 2M/upload_max_filesize = 64M/g' "$PHP_INI_DIR/php.ini" && \
+    sed -i 's/post_max_size = 8M/post_max_size = 64M/g' "$PHP_INI_DIR/php.ini" && \
+    sed -i 's/memory_limit = 128M/memory_limit = 512M/g' "$PHP_INI_DIR/php.ini"
+
+# -----------------------------------------------------------------------------
+# Development / Local Target
+# -----------------------------------------------------------------------------
+FROM base AS dev
+USER www-data
+EXPOSE 8000
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+
+# -----------------------------------------------------------------------------
+# Production Target
+# -----------------------------------------------------------------------------
+FROM base AS production
+
+COPY --chown=www-data:www-data apps/api/composer.json apps/api/composer.lock* ./
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+
+COPY --chown=www-data:www-data apps/api/ ./
+RUN composer dump-autoload --optimize --no-dev && \
+    chmod -R 775 storage bootstrap/cache
+
+COPY infrastructure/docker/supervisor/supervisord.conf /etc/supervisor/supervisord.conf
+COPY infrastructure/docker/supervisor/laravel-worker.conf /etc/supervisor/conf.d/laravel-worker.conf
+
+USER www-data
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8000/api/health || exit 1
+
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]

@@ -1,0 +1,175 @@
+name: Monorepo CI Pipeline
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Frontend & TypeScript Monorepo Validation
+  # ---------------------------------------------------------------------------
+  web-ci:
+    name: Next.js 16 & TypeScript Packages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck Shared Packages
+        run: |
+          pnpm --filter @clothing-commerce/types typecheck
+          pnpm --filter @clothing-commerce/ui typecheck
+
+      - name: Typecheck Next.js 16 Web Application
+        run: pnpm --filter web typecheck
+
+      - name: Build Next.js 16 Web Application
+        run: pnpm --filter web build
+
+  # ---------------------------------------------------------------------------
+  # Laravel 13 Modular REST API Validation
+  # ---------------------------------------------------------------------------
+  api-ci:
+    name: Laravel 13 & PHP 8.3 Tests
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: clothing_commerce
+          MYSQL_USER: sail
+          MYSQL_PASSWORD: password
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, bcmath, redis, zip
+          coverage: none
+
+      - name: Check PHP and Composer Version
+        run: |
+          php -v
+          composer -V
+
+      - name: Get Composer Cache Directory
+        id: composer-cache
+        working-directory: apps/api
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer Dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('apps/api/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Install API Dependencies
+        working-directory: apps/api
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Setup Environment
+        working-directory: apps/api
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run Migrations against MySQL 8
+        working-directory: apps/api
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: clothing_commerce
+          DB_USERNAME: sail
+          DB_PASSWORD: password
+        run: php artisan migrate --force
+
+      - name: Test Queue Worker with Test Job
+        working-directory: apps/api
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: clothing_commerce
+          DB_USERNAME: sail
+          DB_PASSWORD: password
+          QUEUE_CONNECTION: database
+        run: |
+          php artisan test:dispatch-job
+          php artisan queue:work --once
+
+      - name: Test Scheduler Execution
+        working-directory: apps/api
+        run: |
+          php artisan schedule:list
+          php artisan schedule:run
+
+  # ---------------------------------------------------------------------------
+  # Docker Compose & Architecture Validation
+  # ---------------------------------------------------------------------------
+  docker-validation:
+    name: Docker Configuration Lint & Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose (Development)
+        run: |
+          cp .env.development.example .env
+          docker compose config
+
+      - name: Validate Docker Compose (Production)
+        run: |
+          cp .env.production.example .env.production
+          docker compose -f docker-compose.prod.yml config

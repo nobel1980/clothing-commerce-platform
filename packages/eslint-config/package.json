@@ -1,0 +1,10 @@
+{
+  "name": "@clothing-commerce/eslint-config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "base.js",
+  "files": [
+    "base.js",
+    "next.js"
+  ]
+}
