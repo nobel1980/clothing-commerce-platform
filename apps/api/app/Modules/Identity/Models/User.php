@@ -112,4 +112,12 @@ class User extends Authenticatable implements MustVerifyEmail
             'report_viewer',
         ]);
     }
+
+    /**
+     * Create a new factory instance for the model.
+     */
+    protected static function newFactory(): \Database\Factories\Identity\UserFactory
+    {
+        return \Database\Factories\Identity\UserFactory::new();
+    }
 }

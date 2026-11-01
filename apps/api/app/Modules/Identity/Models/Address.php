@@ -75,4 +75,12 @@ class Address extends Model
 
         return implode(', ', array_filter($parts));
     }
+
+    /**
+     * Create a new factory instance for the model.
+     */
+    protected static function newFactory(): \Database\Factories\Identity\AddressFactory
+    {
+        return \Database\Factories\Identity\AddressFactory::new();
+    }
 }
