@@ -1,6 +1,6 @@
 # Clothing Commerce Platform
 
-A modern, high-performance, modular clothing e-commerce platform built as an enterprise-grade monorepo featuring a **Next.js 16** frontend (Storefront & Admin Backoffice), a modular **Laravel 13** backend on **PHP 8.3+**, **MySQL 8**, **Redis 7**, **NGINX**, and containerized orchestration. Designed for the Bangladesh market with bKash, Nagad, COD, Pathao, Steadfast, and REDX integrations.
+A modern, high-performance, modular clothing e-commerce platform built as an enterprise-grade monorepo featuring a **Next.js 16** frontend (Storefront & Admin Backoffice), a domain-modular **Laravel 13** REST API on **PHP 8.3+**, **MySQL 8**, **Redis 7**, **NGINX**, and containerized orchestration. Designed for regional scalability and localized commerce with bKash, Nagad, Cash On Delivery (COD), Pathao, Steadfast, and REDX courier integrations.
 
 ---
 
@@ -11,22 +11,35 @@ clothing-commerce-platform/
 │
 ├── apps/
 │   ├── web/                     # Next.js 16 App Router (Turbopack, React 19, Strict TS)
-│   │   ├── src/app/(store)/     # Customer-facing storefront
-│   │   ├── src/app/(admin)/     # Backoffice administrative portal
+│   │   ├── src/app/(store)/     # Customer-facing storefront routes
+│   │   ├── src/app/(admin)/     # Backoffice administrative portal routes
 │   │   ├── src/app/api/health/  # Frontend healthcheck route
 │   │   ├── src/features/        # Domain-driven features (catalog, cart, checkout, orders, admin)
 │   │   ├── src/components/      # Reusable UI components & layouts
 │   │   └── package.json
 │   │
 │   └── api/                     # Laravel 13 Modular Architecture (PHP 8.3+)
-│       ├── app/Modules/         # Isolated business domains (13 modules)
+│       ├── app/Modules/         # 13 Isolated business domains
+│       │   ├── Identity/        # Authentication, RBAC, Users, Audit Logs (✅ Implemented)
+│       │   ├── Catalog/         # Categories, Products, Variants, Images, Attributes (✅ Implemented)
+│       │   ├── Inventory/       # Stock levels, movements, reservations, warehouses
+│       │   ├── Cart/            # Session & persistent cart operations
+│       │   ├── Checkout/        # Two-stage checkout & price calculation
+│       │   ├── Orders/          # Order lifecycle, status machine, snapshots
+│       │   ├── Payments/        # Gateway adapters (bKash, Nagad, COD), refunds, webhooks
+│       │   ├── Promotions/      # Coupons, discounts, anti-abuse rules
+│       │   ├── Shipping/        # Courier adapters (Pathao, Steadfast, REDX), tracking
+│       │   ├── Customers/       # Customer profiles, wishlists, address books
+│       │   ├── Reviews/         # Ratings, reviews & moderation
+│       │   ├── Notifications/   # Asynchronous transactional email & SMS
+│       │   └── Reporting/       # Analytics, sales aggregation, read models
 │       ├── app/Shared/          # Contracts, Events, Exceptions, Money value objects
 │       ├── app/Jobs/            # Asynchronous Queue Jobs
 │       ├── routes/              # api.php, console.php (scheduler), web.php
 │       └── composer.json
 │
 ├── packages/                    # Shared TypeScript packages
-│   ├── ui/                      # Shared design system components (Button, Badge, Card, etc.)
+│   ├── ui/                      # Shared design system components (Button, Badge, Card, StatusIndicator)
 │   ├── types/                   # Cross-cutting TypeScript contracts & API models
 │   ├── eslint-config/           # Shared linting configs (base & next)
 │   └── tsconfig/                # Shared compiler configs (base, nextjs, react-library)
@@ -34,7 +47,7 @@ clothing-commerce-platform/
 ├── infrastructure/              # Containerization, Reverse Proxy & Storage
 │   ├── docker/                  # Dockerfiles (Dockerfile.web, Dockerfile.api, Dockerfile.nginx)
 │   ├── supervisor/              # Supervisord & queue worker daemon configs
-│   ├── nginx/                   # Reverse proxy gateway & rate-limiting configs
+│   ├── nginx/                   # Reverse proxy gateway, SSL termination & rate limiting
 │   ├── mysql/                   # MySQL 8 custom my.cnf & 01-init.sql
 │   └── redis/                   # Redis 7 production redis.conf
 │
@@ -67,49 +80,117 @@ clothing-commerce-platform/
 | Layer | Technology | Version | Purpose |
 | :--- | :--- | :--- | :--- |
 | **Frontend** | Next.js (App Router) | `16.x` | Server components, static optimization & storefront/admin |
-| **Language** | TypeScript (Strict) | `5.6+` | Type safety across web, types, and ui packages |
+| **Language** | TypeScript (Strict) | `5.6+` | Type safety across `web`, `types`, and `ui` packages |
 | **Backend** | Laravel Framework | `13.x` | Domain-modular REST API, queue processing & scheduling |
 | **Runtime** | PHP CLI / FPM | `8.3+` | High performance PHP engine with opcache & JIT |
 | **Database** | MySQL | `8.0 / 8.3` | Relational storage with persistent volumes & UTF8mb4 |
 | **Cache/Queue** | Redis | `7.x` | Queue broker, session driver, and distributed caching |
-| **Gateway** | NGINX | `1.27 Alpine` | Reverse proxy, SSL termination, and rate limiting |
-| **Auth** | Laravel Sanctum | `4.x` | Cookie-based stateful authentication |
-| **RBAC** | Spatie Permission | `6.x` | Role-based access control for admin |
+| **Gateway** | NGINX | `1.27 Alpine` | Reverse proxy, SSL termination, static serving & rate limiting |
+| **Auth** | Laravel Sanctum | `4.x` | Cookie-based SPA & bearer token API authentication |
+| **RBAC** | Spatie Permission | `6.x` | Role-based access control for administrative staff |
 | **Package Mgr** | pnpm | `9.x` | Fast, deterministic monorepo dependency management |
 
 ---
 
-## Domain Modules (Laravel)
+## Domain Modules & Implementation Status
 
-| Module | Owns | API Prefix |
-| :--- | :--- | :--- |
-| **Identity** | Users, roles, permissions, sessions, audit logs | `/auth`, `/admin/auth` |
-| **Catalog** | Products, categories, brands, variants, images | `/catalog`, `/admin/products` |
-| **Inventory** | Stock, warehouses, movements, reservations | `/admin/inventory` |
-| **Cart** | Cart items, quantity management | `/cart` |
-| **Checkout** | Pricing orchestration, order placement | `/checkout` |
-| **Orders** | Order lifecycle, status history, snapshots | `/orders`, `/admin/orders` |
-| **Payments** | Transactions, gateway adapters, refunds | `/payments`, `/webhooks` |
-| **Promotions** | Coupons, discount rules, usage limits | `/admin/promotions` |
-| **Shipping** | Courier adapters, consignments, tracking | `/shipping`, `/admin/shipments` |
-| **Customers** | Addresses, profiles, wishlists | `/customers` |
-| **Reviews** | Product reviews, moderation | `/reviews` |
-| **Notifications** | Email, SMS, in-app notifications | — |
-| **Reporting** | Sales summaries, read models | `/admin/reports` |
+The backend is built around a **Modular Monolith** pattern inside `apps/api/app/Modules/`. Each domain encapsulates its own Models, Controllers, Services, Form Requests, API Resources, and Migrations:
+
+| Module | Status | Entities & Capabilities | API Endpoints |
+| :--- | :---: | :--- | :--- |
+| **Identity** | ✅ Complete | Users, Roles, Permissions, Addresses, Audit Logs, Staff Authentication | `/api/auth/*`<br>`/api/admin/auth/*` |
+| **Catalog** | ✅ Complete | Brands, Categories, Attributes, AttributeValues, Products, Variants, Images, Bulk Import, Search & Filtering | `/api/catalog/*`<br>`/api/admin/catalog/*` |
+| **Inventory** | ⏳ Next Up | Stock balances, warehouse locations, stock reservations, ledger movements | `/api/admin/inventory/*` |
+| **Cart** | 📋 Planned | Guest & authenticated shopping cart, line item calculations | `/api/cart/*` |
+| **Checkout** | 📋 Planned | Two-stage checkout orchestration, pricing engine, lock acquisition | `/api/checkout/*` |
+| **Orders** | 📋 Planned | Order state machine, item snapshots, status history, cancellations | `/api/orders/*`<br>`/api/admin/orders/*` |
+| **Payments** | 📋 Planned | Gateway adapters (bKash, Nagad, COD), payment verification, webhooks | `/api/payments/*`<br>`/api/webhooks/*` |
+| **Promotions** | 📋 Planned | Coupons, percentage/fixed discounts, usage quotas, anti-abuse rules | `/api/admin/promotions/*` |
+| **Shipping** | 📋 Planned | Courier integration (Pathao, Steadfast, REDX), consignment creation | `/api/shipping/*`<br>`/api/admin/shipments/*` |
+| **Customers** | 📋 Planned | Customer profiles, saved addresses, wishlists | `/api/customers/*` |
+| **Reviews** | 📋 Planned | Verified buyer reviews, star ratings, moderation workflows | `/api/reviews/*` |
+| **Notifications** | 📋 Planned | Asynchronous transactional emails, SMS alerts, in-app notifications | Internal Queue |
+| **Reporting** | 📋 Planned | Sales summaries, revenue trends, inventory velocity read-models | `/api/admin/reports/*` |
 
 ---
 
-## Admin Roles (RBAC)
+## Implemented Modules Deep Dive
 
-| Role | Permissions |
+### 1. Identity Module (`app/Modules/Identity`)
+- **Authentication**: Laravel Sanctum stateful cookies for SPA and tokens for API clients.
+- **Role-Based Access Control**: Managed via `spatie/laravel-permission` with seeders and migration guarantees.
+- **Address Management**: Multi-address management (billing/shipping) with default flag protection.
+- **Audit Logging**: Asynchronous audit recording for security and administrative operations.
+
+### 2. Catalog Module (`app/Modules/Catalog`)
+- **Entities**:
+  - `Brand`: Name, slug, website, logo URL, active status.
+  - `Category`: Self-referencing hierarchical tree (`parent_id`), slug, description, image, order column, active status.
+  - `Attribute` & `AttributeValue`: Dynamic product traits (e.g., Color, Size, Material).
+  - `Product`: Name, unique slug, description, Brand relationship, Category relationship, SEO title & description, publication status (`draft`, `published`, `archived`), publication timestamp, and featured flag.
+  - `ProductVariant`: SKU (unique), color, size, selling price, compare-at price, cost price, and status (`active`, `inactive`).
+  - `ProductImage`: Storage disk abstraction (`disk`, `path`), URL accessor, display order (`sort_order`), and primary flag (`is_primary`).
+  - `VariantAttributeValue`: Pivot associating variants with dynamic attribute values.
+- **Architectural Rules Enforced**:
+  - **Financial Precision**: All prices (`price`, `compare_at_price`, `cost_price`) are strictly validated and stored as positive **integers** in smallest currency subunits (cents/paisa). Floating-point arithmetic is prohibited.
+  - **Zero Public Leaks**: Public storefront routes enforce strict `published()` query scopes. Drafts, archived items, future-dated products, and inactive categories return HTTP 404 to unauthenticated store visitors.
+  - **Storage Abstraction**: Product image uploads utilize Laravel's `Storage` facade (`disk` + `path`). Images are never tied to hardcoded local file paths.
+  - **Category Tree Integrity**: Circular parenting prevention (a category cannot be its own parent) and orphan protection on category deletion (children safely set `parent_id = null`).
+  - **Bulk Import Foundation**: Extensible CSV/JSON product and variant importer (`ImportService`) executed within database transactions.
+
+---
+
+## Catalog API Reference
+
+### Public Storefront Routes (`/api/catalog/*`)
+*No authentication required. Only active categories and published products are accessible.*
+
+| Method | Endpoint | Description | Query Parameters |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/catalog/categories` | List active categories (root categories with active children) | — |
+| `GET` | `/api/catalog/categories/{slug}` | Get category details with active descendant categories | — |
+| `GET` | `/api/catalog/products` | Paginated product listing with filters and sorting | `search`, `category`, `brand`, `min_price`, `max_price`, `color`, `size`, `sort`, `per_page` |
+| `GET` | `/api/catalog/products/{slug}` | Get detailed published product (with brand, category, images, active variants) | — |
+
+### Admin Backoffice Routes (`/api/admin/catalog/*`)
+*Requires `auth:sanctum` and staff privileges.*
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/admin/catalog/categories/tree` | Full hierarchical category tree |
+| `GET` | `/api/admin/catalog/categories` | Paginated category list |
+| `POST` | `/api/admin/catalog/categories` | Create new category (HTTP 201) |
+| `GET` | `/api/admin/catalog/categories/{id}` | Get category detail |
+| `PUT` | `/api/admin/catalog/categories/{id}` | Update category |
+| `DELETE` | `/api/admin/catalog/categories/{id}` | Delete category (orphans children safely) |
+| `GET` | `/api/admin/catalog/products` | List all products (drafts, published, archived) with admin filters |
+| `POST` | `/api/admin/catalog/products` | Create product (HTTP 201) |
+| `GET` | `/api/admin/catalog/products/{id}` | Get product detail |
+| `PUT` | `/api/admin/catalog/products/{id}` | Update product metadata, brand, category, SEO |
+| `DELETE` | `/api/admin/catalog/products/{id}` | Delete product and cascading images/variants |
+| `POST` | `/api/admin/catalog/products/{id}/publish` | Transition status to `published` |
+| `POST` | `/api/admin/catalog/products/{id}/unpublish`| Transition status to `draft` |
+| `POST` | `/api/admin/catalog/products/{id}/variants` | Create product variant (HTTP 201) |
+| `PUT` | `/api/admin/catalog/products/{id}/variants/{variantId}` | Update variant SKU, prices, color, size |
+| `DELETE` | `/api/admin/catalog/products/{id}/variants/{variantId}` | Delete variant |
+| `POST` | `/api/admin/catalog/products/{id}/images` | Upload product image using storage abstraction |
+| `POST` | `/api/admin/catalog/products/{id}/images/reorder` | Batch update image sort orders |
+| `DELETE` | `/api/admin/catalog/products/{id}/images/{imageId}` | Delete image file from storage and database |
+| `POST` | `/api/admin/catalog/products/import` | Bulk import products via CSV or JSON payload |
+
+---
+
+## Admin Roles & Permissions (RBAC)
+
+| Role | Permissions & Responsibilities |
 | :--- | :--- |
-| `super_admin` | Full platform access |
-| `product_manager` | Catalog, categories, products, images, publishing |
-| `inventory_manager` | Stock, warehouses, adjustments |
-| `order_manager` | Orders, fulfilment, cancellations, refunds |
-| `customer_support` | View orders, view customers |
-| `marketing_manager` | Coupons, promotions, campaigns |
-| `report_viewer` | Read-only reports & dashboards |
+| `super_admin` | Full platform control, user management, configuration, audit trail review |
+| `product_manager` | Catalog management, category tree, product variants, media assets, publishing |
+| `inventory_manager` | Stock allocation, warehouse transfers, ledger corrections, safety buffer rules |
+| `order_manager` | Order lifecycle fulfillment, address corrections, cancellations, dispatch |
+| `customer_support` | Read-only order and customer view, support dispute inspection |
+| `marketing_manager` | Coupons, campaign rules, promotional banners, discount thresholds |
+| `report_viewer` | Read-only access to sales performance, profit margins, and inventory health |
 
 ---
 
@@ -119,7 +200,7 @@ clothing-commerce-platform/
 - **pnpm**: `>= 9.x` (`corepack enable && corepack prepare pnpm@9.0.0 --activate`)
 - **PHP**: `>= 8.3` with extensions: `pdo_mysql`, `bcmath`, `opcache`, `intl`, `mbstring`, `zip`, `xml`
 - **Composer**: `>= 2.7`
-- **Docker & Docker Compose**: (Optional for host mode, recommended for containerized stack)
+- **Docker & Docker Compose**: (Recommended for local containerized orchestration)
 
 ---
 
@@ -137,7 +218,7 @@ clothing-commerce-platform/
    docker compose up --build
    ```
 
-3. **Run Migrations & Seed (first time)**:
+3. **Run Migrations & Seeders (first time)**:
    ```bash
    docker compose exec api php artisan migrate --seed
    ```
@@ -158,7 +239,7 @@ clothing-commerce-platform/
    pnpm install
    ```
 
-2. **Install Laravel API Dependencies**:
+2. **Install Laravel API Dependencies & Configure DB**:
    ```bash
    cd apps/api
    composer install
@@ -167,8 +248,9 @@ clothing-commerce-platform/
    php artisan migrate --seed
    ```
 
-3. **Run Next.js 16 Web App**:
+3. **Run Next.js 16 Web Application**:
    ```bash
+   # From root directory
    pnpm dev
    ```
 
@@ -180,118 +262,146 @@ clothing-commerce-platform/
 
 ---
 
+## Testing & Quality Validation
+
+Run comprehensive verification across both the frontend monorepo packages and the Laravel backend:
+
+### Backend Tests (PHPUnit)
+```bash
+cd apps/api
+
+# Run all feature tests
+php artisan test
+
+# Run Catalog module feature tests specifically
+php artisan test --filter=Catalog
+
+# Verify queue job dispatch and execution
+php artisan test:dispatch-job
+php artisan queue:work --once
+
+# Verify scheduler run
+php artisan schedule:run
+```
+
+### Frontend Typechecking & Builds
+```bash
+# Verify shared types package
+pnpm --filter @clothing-commerce/types typecheck
+
+# Verify shared UI library
+pnpm --filter @clothing-commerce/ui typecheck
+
+# Verify Next.js web application
+pnpm --filter web typecheck
+pnpm --filter web build
+```
+
+---
+
 ## Health Check Endpoints
 
-| Service | Endpoint | Description | Sample Output |
+| Service | Endpoint | Description | Sample Response |
 | :--- | :--- | :--- | :--- |
-| **Next.js 16** | `GET /api/health` | Returns frontend health, uptime, and status | `{"status":"healthy","service":"clothing-commerce-web","uptimeSeconds":142}` |
-| **Laravel 13** | `GET /api/health` | Tests MySQL connection, Redis, and queue drivers | `{"status":"healthy","checks":{"database":{"status":"ok"},"queue":{"status":"ok"}}}` |
-| **NGINX** | `GET /nginx-health` | Fast status probe for load balancers | `healthy` |
+| **Next.js 16** | `GET /api/health` | Web application uptime and container probe | `{"status":"healthy","service":"clothing-commerce-web","uptimeSeconds":142}` |
+| **Laravel 13** | `GET /api/health` | Tests active MySQL connection, Redis ping, and queue broker | `{"status":"healthy","checks":{"database":{"status":"ok"},"redis":{"status":"ok"},"queue":{"status":"ok"}}}` |
+| **NGINX** | `GET /nginx-health` | High-frequency status probe for load balancers | `healthy` |
 
 ---
 
 ## Background Workers & Scheduling
 
 ### Queue Worker
+Heavy workflows (image processing, catalog sync, notifications, invoice generation) implement `Illuminate\Contracts\Queue\ShouldQueue`:
 
 ```bash
-# Process a test job
 cd apps/api
-php artisan test:dispatch-job
-php artisan queue:work --once
 
-# Run in daemon mode
+# Run worker in daemon mode with resilience parameters
 php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
 ```
 
-In Docker, workers are managed automatically by the `queue` container using Supervisor.
+In Docker environments, workers are managed automatically by the `queue` service via Supervisor (`infrastructure/supervisor/supervisord.conf`).
 
 ### Scheduler
-
-Configured in `apps/api/routes/console.php`.
+Scheduled tasks are registered in `apps/api/routes/console.php`:
 
 ```bash
-# List scheduled tasks
-cd apps/api
+# List all active schedules
 php artisan schedule:list
 
-# Run pending tasks manually
+# Trigger pending tasks manually
 php artisan schedule:run
 ```
-
-In Docker, the `scheduler` container runs `php artisan schedule:work` continuously.
 
 ---
 
 ## Production Deployment
 
-Production uses `docker-compose.prod.yml` with:
-- Non-root users (`nextjs:nodejs` and `www-data`)
-- Multi-stage builds with standalone output
-- Persistent volumes (`mysql_data_prod`, `redis_data_prod`, `api_storage_prod`)
-- Multi-replica scaling for `web` and `api`
-- Hard resource CPU and memory limits
+Production uses `docker-compose.prod.yml` featuring:
+- Hardened non-root containers (`nextjs:nodejs` uid `1001` and `www-data`)
+- Multi-stage Docker builds with standalone Next.js output
+- Persistent named volumes (`mysql_data_prod`, `redis_data_prod`, `api_storage_prod`)
+- Horizontal replica scaling for `web` and `api` services
+- Explicit memory and CPU resource reservations & limits
 
 ```bash
 cp .env.production.example .env.production
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-See [docs/deployment/deployment-guide.md](./docs/deployment/deployment-guide.md) for the complete runbook.
+Consult [docs/deployment/deployment-guide.md](./docs/deployment/deployment-guide.md) for complete production zero-downtime procedures.
 
 ---
 
 ## Continuous Integration (CI)
 
-A complete GitHub Actions CI pipeline is located at `.github/workflows/ci.yml`:
-
-1. **Frontend**: Monorepo dependency freeze check, strict TypeScript check across `@clothing-commerce/types`, `@clothing-commerce/ui`, and `apps/web`, and Next.js 16 production build.
-2. **Backend**: PHP 8.3 test matrix with active MySQL 8 & Redis 7 services, database migration run, test job dispatch, and queue worker execution.
-3. **Docker**: Configuration validation and linting for both development and production compose stacks.
+The GitHub Actions pipeline at `.github/workflows/ci.yml` validates every pull request:
+1. **Frontend Job**: Dependency integrity verification, strict TypeScript check on `@clothing-commerce/types`, `@clothing-commerce/ui`, and `apps/web`, followed by Next.js production build.
+2. **Backend Job**: PHP 8.3 test matrix running with live MySQL 8 and Redis 7 containers, running migrations, seeders, feature tests, and queue verification.
+3. **Docker Job**: Configuration syntax validation and compose file linting.
 
 ---
 
-## Documentation
+## Documentation Index
 
 | Document | Description |
 | :--- | :--- |
-| [AGENTS.md](./AGENTS.md) | Coding & architectural guidelines for contributors |
-| [docs/workflows/Planning.md](./docs/workflows/Planning.md) | Master software architecture blueprint (2,300+ lines) |
-| [docs/workflows/README.md](./docs/workflows/README.md) | Workflow index & cross-domain dependency map |
-| [docs/workflows/checkout_workflow.md](./docs/workflows/checkout_workflow.md) | Two-stage checkout, inventory locking, idempotency |
-| [docs/workflows/auth_and_authorization_workflow.md](./docs/workflows/auth_and_authorization_workflow.md) | Auth, RBAC, CSRF, session security |
-| [docs/workflows/order_lifecycle_workflow.md](./docs/workflows/order_lifecycle_workflow.md) | Order state machine, snapshots, cancellation |
-| [docs/workflows/payment_workflow.md](./docs/workflows/payment_workflow.md) | Gateway adapters, webhooks, refunds |
-| [docs/workflows/inventory_management_workflow.md](./docs/workflows/inventory_management_workflow.md) | Stock, reservations, movements, low-stock |
-| [docs/workflows/courier_shipping_workflow.md](./docs/workflows/courier_shipping_workflow.md) | Pathao/Steadfast/REDX, tracking, COD reconciliation |
-| [docs/workflows/product_publishing_workflow.md](./docs/workflows/product_publishing_workflow.md) | Product creation, validation, publish, cache invalidation |
-| [docs/workflows/promotions_workflow.md](./docs/workflows/promotions_workflow.md) | Coupons, discount engine, anti-abuse |
-| [docs/architecture/system_architecture.md](./docs/architecture/system_architecture.md) | System-level architecture overview |
-| [docs/architecture/backend_architecture.md](./docs/architecture/backend_architecture.md) | Laravel modular monolith design |
-| [docs/architecture/frontend_architecture.md](./docs/architecture/frontend_architecture.md) | Next.js App Router design |
-| [docs/database/database-design.md](./docs/database/database-design.md) | ERD, table ownership, indexing strategy |
-| [docs/api/api_conventions.md](./docs/api/api_conventions.md) | API versioning, response format, HTTP codes |
-| [docs/security/security-architecture.md](./docs/security/security-architecture.md) | Threat model, security controls, checklist |
-| [docs/deployment/deployment-guide.md](./docs/deployment/deployment-guide.md) | Local setup, production deploy, CI/CD, rollback |
-| [docs/adr/](./docs/adr/) | Architecture Decision Records |
+| [AGENTS.md](./AGENTS.md) | Architectural invariants, security policies, and contribution guidelines |
+| [docs/workflows/Planning.md](./docs/workflows/Planning.md) | Comprehensive system architecture and domain blueprint |
+| [docs/workflows/README.md](./docs/workflows/README.md) | Workflow directory and domain dependency map |
+| [docs/workflows/product_publishing_workflow.md](./docs/workflows/product_publishing_workflow.md) | Product lifecycle, variant validation, and cache invalidation rules |
+| [docs/workflows/checkout_workflow.md](./docs/workflows/checkout_workflow.md) | Two-stage checkout, stock reservation lock, and idempotency guarantees |
+| [docs/workflows/inventory_management_workflow.md](./docs/workflows/inventory_management_workflow.md) | Multi-warehouse stock tracking, reservations, and ledger movements |
+| [docs/workflows/order_lifecycle_workflow.md](./docs/workflows/order_lifecycle_workflow.md) | Order state machine, line-item snapshots, and fulfillment transitions |
+| [docs/workflows/payment_workflow.md](./docs/workflows/payment_workflow.md) | Payment gateway adapters (bKash, Nagad, COD), webhooks, and refunds |
+| [docs/workflows/courier_shipping_workflow.md](./docs/workflows/courier_shipping_workflow.md) | Courier integrations (Pathao, Steadfast, REDX), COD tracking, consignments |
+| [docs/workflows/auth_and_authorization_workflow.md](./docs/workflows/auth_and_authorization_workflow.md) | Identity authentication, Sanctum session management, and RBAC matrix |
+| [docs/workflows/promotions_workflow.md](./docs/workflows/promotions_workflow.md) | Promotion engine, coupon validation rules, and anti-abuse safeguards |
+| [docs/architecture/system_architecture.md](./docs/architecture/system_architecture.md) | Overall system architecture and infrastructure topologies |
+| [docs/architecture/backend_architecture.md](./docs/architecture/backend_architecture.md) | Laravel modular monolith structure and conventions |
+| [docs/architecture/frontend_architecture.md](./docs/architecture/frontend_architecture.md) | Next.js 16 App Router layout, state management, and RSC design |
+| [docs/database/database-design.md](./docs/database/database-design.md) | Relational database schema, ERD, and indexing strategies |
+| [docs/api/api_conventions.md](./docs/api/api_conventions.md) | REST API design conventions, status codes, and error payloads |
+| [docs/security/security-architecture.md](./docs/security/security-architecture.md) | Security framework, threat model, and defense-in-depth policies |
+| [docs/deployment/deployment-guide.md](./docs/deployment/deployment-guide.md) | Production deployment, container setup, and rollback instructions |
+| [docs/adr/](./docs/adr/) | Architectural Decision Records |
 
 ---
 
 ## Implementation Roadmap
 
-| Phase | Focus | Estimated Time |
-| :--- | :--- | :--- |
-| ✅ **01** | Repository Foundation (monorepo, Docker, Next.js, Laravel, CI) | Done |
-| ✅ **02** | Identity & Authorization (Sanctum, RBAC, audit logging) | Done |
-| 🔲 **03** | Catalog Management (categories, products, variants, images) | 5–7 days |
-| 🔲 **04** | Inventory Management (stock, reservations, movements) | 3–5 days |
-| 🔲 **05** | Storefront (homepage, catalog, search, SEO) | 5–7 days |
-| 🔲 **06** | Cart & Checkout (two-stage checkout, pricing engine) | 4–6 days |
-| 🔲 **07** | Orders & Payments (COD, bKash, Nagad, gateway integration) | 5–7 days |
-| 🔲 **08** | Admin Operations (dashboard, order management, reports) | 4–6 days |
-| 🔲 **09** | Courier Integration (Pathao, Steadfast, REDX) | 3–5 days |
-| 🔲 **10** | Promotions & Reviews (coupons, campaigns, wishlist) | 3–4 days |
-| 🔲 **11** | Quality & Security (E2E, load tests, penetration review) | 5–7 days |
-| 🔲 **12** | Production Launch (CI/CD, backups, monitoring, smoke tests) | 3–5 days |
-
-**Estimated total:** 45–66 working days
+| Phase | Milestone | Focus Area | Status |
+| :---: | :--- | :--- | :---: |
+| **01** | Foundation | Monorepo setup, Docker environments, Next.js 16, Laravel 13, CI | ✅ Complete |
+| **02** | Identity & Auth | Sanctum auth, Spatie RBAC, user profiles, address book, audit logs | ✅ Complete |
+| **03** | Catalog Management | Brands, categories, attributes, products, variants, images, search/filtering, bulk import | ✅ Complete |
+| **04** | Inventory Management | Stock balances, warehouse locations, stock reservations, ledger movements | ⏳ Next Up |
+| **05** | Storefront Portal | Customer catalog browsing, category tree, faceted filters, product details, SEO | 🔲 Planned |
+| **06** | Cart & Checkout | Session & persistent cart, two-stage checkout, pricing engine, lock acquisition | 🔲 Planned |
+| **07** | Orders & Payments | Order lifecycle state machine, bKash / Nagad / COD payment flows, webhooks | 🔲 Planned |
+| **08** | Admin Operations | Backoffice catalog management, inventory adjustments, order fulfillment | 🔲 Planned |
+| **09** | Courier Integration | Pathao, Steadfast, REDX automated consignments, tracking, COD reconciliation | 🔲 Planned |
+| **10** | Promotions & Reviews | Coupon validation engine, customer reviews, ratings moderation, wishlists | 🔲 Planned |
+| **11** | Quality & Hardening | E2E test suites, security penetration review, load testing, performance tuning | 🔲 Planned |
+| **12** | Production Launch | Automated deployment pipeline, database backup routines, monitoring, smoke tests | 🔲 Planned |
