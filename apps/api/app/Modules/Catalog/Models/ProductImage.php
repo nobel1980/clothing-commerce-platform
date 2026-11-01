@@ -2,6 +2,7 @@
 
 namespace App\Modules\Catalog\Models;
 
+use Database\Factories\Catalog\ProductImageFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,11 @@ use Illuminate\Support\Facades\Storage;
 class ProductImage extends Model
 {
     use HasFactory;
+
+    protected static function newFactory(): ProductImageFactory
+    {
+        return ProductImageFactory::new();
+    }
 
     protected $fillable = [
         'product_id',

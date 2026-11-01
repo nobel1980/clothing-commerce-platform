@@ -2,6 +2,7 @@
 
 namespace App\Modules\Catalog\Models;
 
+use Database\Factories\Catalog\ProductVariantFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class ProductVariant extends Model
 {
     use HasFactory, SoftDeletes;
+
+    protected static function newFactory(): ProductVariantFactory
+    {
+        return ProductVariantFactory::new();
+    }
 
     protected $fillable = [
         'product_id',
