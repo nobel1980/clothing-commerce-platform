@@ -123,6 +123,8 @@ Route::prefix('account')->name('account.')->middleware('auth:sanctum')->group(fu
         ->name('addresses.default');
     Route::apiResource('addresses', \App\Modules\Identity\Controllers\Customer\AddressController::class)
         ->names('addresses');
+    Route::get('orders', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'listOrders'])
+        ->name('orders.index');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,4 +221,116 @@ Route::prefix('admin/catalog')
 
         Route::apiResource('products', \App\Modules\Catalog\Controllers\Admin\AdminProductController::class)
             ->names('products');
+    });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inventory — Public Storefront Availability
+// ─────────────────────────────────────────────────────────────────────────────
+Route::prefix('inventory')->name('inventory.')->group(function () {
+    Route::get('variants/{variant}/availability', [\App\Modules\Inventory\Controllers\Store\StoreInventoryController::class, 'availability'])
+        ->name('variants.availability');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cart — Guest & Customer Cart Management, Merging, Address & Coupon Selection
+// ─────────────────────────────────────────────────────────────────────────────
+Route::prefix('cart')->name('cart.')->group(function () {
+    Route::get('/', [\App\Modules\Cart\Controllers\CartController::class, 'show'])
+        ->name('show');
+    Route::delete('/', [\App\Modules\Cart\Controllers\CartController::class, 'clear'])
+        ->name('clear');
+    Route::post('items', [\App\Modules\Cart\Controllers\CartController::class, 'addItem'])
+        ->name('items.store');
+    Route::put('items/{item}', [\App\Modules\Cart\Controllers\CartController::class, 'updateItem'])
+        ->name('items.update');
+    Route::patch('items/{item}', [\App\Modules\Cart\Controllers\CartController::class, 'updateItem'])
+        ->name('items.patch');
+    Route::delete('items/{item}', [\App\Modules\Cart\Controllers\CartController::class, 'removeItem'])
+        ->name('items.destroy');
+    Route::put('address', [\App\Modules\Cart\Controllers\CartController::class, 'selectAddress'])
+        ->name('address.update');
+    Route::post('address', [\App\Modules\Cart\Controllers\CartController::class, 'selectAddress'])
+        ->name('address.store');
+    Route::post('coupon', [\App\Modules\Cart\Controllers\CartController::class, 'applyCoupon'])
+        ->name('coupon.apply');
+    Route::delete('coupon', [\App\Modules\Cart\Controllers\CartController::class, 'removeCoupon'])
+        ->name('coupon.remove');
+    Route::post('merge', [\App\Modules\Cart\Controllers\CartController::class, 'merge'])
+        ->middleware('auth:sanctum')
+        ->name('merge');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Checkout — Public Authoritative Quote, Coupon, Shipping & Order Placement
+// ─────────────────────────────────────────────────────────────────────────────
+Route::prefix('checkout')->name('checkout.')->group(function () {
+    Route::post('quote', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'quote'])
+        ->name('quote');
+    Route::post('validate-coupon', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'validateCoupon'])
+        ->name('validate-coupon');
+    Route::post('shipping-rates', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'shippingRates'])
+        ->name('shipping-rates');
+    Route::post('orders', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'placeOrder'])
+        ->name('orders.store');
+    Route::get('orders/{orderNumber}', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'showOrder'])
+        ->name('orders.show');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inventory — Admin Backoffice (requires authentication + staff role)
+// ─────────────────────────────────────────────────────────────────────────────
+Route::prefix('admin/inventory')
+    ->name('admin.inventory.')
+    ->middleware(['auth:sanctum', 'staff'])
+    ->group(function () {
+        // Warehouses
+        Route::apiResource('warehouses', \App\Modules\Inventory\Controllers\Admin\AdminWarehouseController::class)
+            ->names('warehouses');
+
+        // Inventory Items & Stock Operations
+        Route::get('items', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryController::class, 'index'])
+            ->name('items.index');
+        Route::get('items/{inventoryItem}', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryController::class, 'show'])
+            ->name('items.show');
+        Route::put('items/{inventoryItem}', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryController::class, 'update'])
+            ->name('items.update');
+        Route::get('variants/{variant}/stock', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryController::class, 'variantStock'])
+            ->name('variants.stock');
+
+        Route::post('adjust', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryController::class, 'adjust'])
+            ->name('adjust');
+        Route::post('set-stock', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryController::class, 'setStock'])
+            ->name('set-stock');
+        Route::post('transfer', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryController::class, 'transfer'])
+            ->name('transfer');
+
+        // Stock Movement History
+        Route::get('movements', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryController::class, 'movements'])
+            ->name('movements.index');
+
+        // Stock Reservations
+        Route::post('reservations/expire-overdue', [\App\Modules\Inventory\Controllers\Admin\AdminReservationController::class, 'expireOverdue'])
+            ->name('reservations.expire-overdue');
+        Route::get('reservations', [\App\Modules\Inventory\Controllers\Admin\AdminReservationController::class, 'index'])
+            ->name('reservations.index');
+        Route::post('reservations', [\App\Modules\Inventory\Controllers\Admin\AdminReservationController::class, 'store'])
+            ->name('reservations.store');
+        Route::get('reservations/{reservation}', [\App\Modules\Inventory\Controllers\Admin\AdminReservationController::class, 'show'])
+            ->name('reservations.show');
+        Route::post('reservations/{reservation}/commit', [\App\Modules\Inventory\Controllers\Admin\AdminReservationController::class, 'commit'])
+            ->name('reservations.commit');
+        Route::post('reservations/{reservation}/release', [\App\Modules\Inventory\Controllers\Admin\AdminReservationController::class, 'release'])
+            ->name('reservations.release');
+
+        // Inventory Reporting
+        Route::prefix('reports')->name('reports.')->group(function () {
+            Route::get('summary', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryReportController::class, 'summary'])
+                ->name('summary');
+            Route::get('low-stock', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryReportController::class, 'lowStock'])
+                ->name('low-stock');
+            Route::get('warehouses', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryReportController::class, 'warehouses'])
+                ->name('warehouses');
+            Route::get('movements', [\App\Modules\Inventory\Controllers\Admin\AdminInventoryReportController::class, 'movements'])
+                ->name('movements');
+        });
     });

@@ -1,81 +1,237 @@
 import * as React from 'react';
-import { Button, Badge, Card, StatusIndicator } from '@clothing-commerce/ui';
-import type { Product } from '@clothing-commerce/types';
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { ArrowRight, Sparkles, Layers } from 'lucide-react';
+import type { CatalogCategory, CatalogProduct } from '@clothing-commerce/types';
+import { fetchStoreCategories, fetchStoreProducts } from '@/features/catalog/api/catalogApi';
+import { ProductCard } from '@/features/catalog/components/ProductCard';
+import { buildCanonicalUrl } from '@/lib/utils/format';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/shared/EmptyState';
 
-const SAMPLE_FEATURED_PRODUCTS: Product[] = [
-  {
-    id: 'prod-001',
-    name: 'Minimalist Heavyweight Tee',
-    slug: 'minimalist-heavyweight-tee',
-    description: '280 GSM premium organic cotton, tailored boxy fit.',
-    categories: [{ id: 'cat-1', name: 'T-Shirts', slug: 't-shirts', createdAt: '', updatedAt: '' }],
-    variants: [],
-    basePrice: { amount: 4500, currency: 'USD', formatted: '$45.00' },
-    status: 'published',
-    images: ['/products/tee-black.jpg'],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+export const metadata: Metadata = {
+  title: 'Atelier Véra | Contemporary Ready-to-Wear & Tailored Essentials',
+  description:
+    'Explore modern ready-to-wear silhouettes, organic heavyweight jersey, and structured outerwear.',
+  alternates: {
+    canonical: buildCanonicalUrl('/'),
   },
-  {
-    id: 'prod-002',
-    name: 'Structured French Terry Hoodie',
-    slug: 'structured-french-terry-hoodie',
-    description: '450 GSM custom knit with double-lined hood.',
-    categories: [{ id: 'cat-2', name: 'Outerwear', slug: 'outerwear', createdAt: '', updatedAt: '' }],
-    variants: [],
-    basePrice: { amount: 11000, currency: 'USD', formatted: '$110.00' },
-    status: 'published',
-    images: ['/products/hoodie-grey.jpg'],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+};
 
-export default function StoreHomePage() {
+export default async function StoreHomePage() {
+  let featuredProducts: CatalogProduct[] = [];
+  let latestProducts: CatalogProduct[] = [];
+  let categories: CatalogCategory[] = [];
+  let apiErrorMessage: string | null = null;
+
+  try {
+    const [featuredRes, latestRes, categoriesRes] = await Promise.all([
+      fetchStoreProducts({ featured: true, per_page: 4 }),
+      fetchStoreProducts({ sort: 'newest', per_page: 8 }),
+      fetchStoreCategories(),
+    ]);
+    featuredProducts = featuredRes.data ?? [];
+    latestProducts = latestRes.data ?? [];
+    categories = categoriesRes ?? [];
+  } catch (err) {
+    apiErrorMessage =
+      err instanceof Error ? err.message : 'Unable to reach the catalog service.';
+  }
+
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 24px' }}>
-      <header style={{ marginBottom: '48px', textAlign: 'center' }}>
-        <div style={{ display: 'inline-flex', gap: '8px', marginBottom: '16px' }}>
-          <Badge variant="success">Next.js 16 Storefront</Badge>
-          <Badge variant="outline">Strict TypeScript</Badge>
-        </div>
-        <h1 style={{ fontSize: '3rem', fontWeight: 800, letterSpacing: '-0.025em', marginBottom: '12px' }}>
-          Clothing Commerce Platform
-        </h1>
-        <p style={{ color: '#71717a', fontSize: '1.25rem', maxWidth: '640px', margin: '0 auto 24px' }}>
-          Modular headless commerce architecture powered by Next.js 16, Laravel 13, MySQL 8 & Redis.
-        </p>
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-          <Button variant="primary" size="lg">Explore Collection</Button>
-          <Button variant="secondary" size="lg">View Admin Portal</Button>
-        </div>
-      </header>
-
-      <section style={{ marginBottom: '48px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Featured Essentials</h2>
-          <StatusIndicator status="healthy" label="Inventory Synced" />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
-          {SAMPLE_FEATURED_PRODUCTS.map((product) => (
-            <Card
-              key={product.id}
-              title={product.name}
-              subtitle={product.categories[0]?.name}
+    <div>
+      {/* Editorial Hero Banner */}
+      <section
+        aria-label="Seasonal collection hero"
+        className="border-b"
+        style={{
+          background: 'linear-gradient(135deg, #18181b 0%, #27272a 100%)',
+          color: '#fafafa',
+          padding: '4.5rem 0',
+        }}
+      >
+        <div className="store-container">
+          <div style={{ maxWidth: '42rem' }}>
+            <Badge
+              variant="secondary"
+              style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.14)',
+                color: '#fafafa',
+                marginBottom: '1rem',
+              }}
             >
-              <p style={{ color: '#71717a', fontSize: '14px', margin: '12px 0' }}>
-                {product.description}
-              </p>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
-                <span style={{ fontSize: '18px', fontWeight: 700 }}>
-                  {product.basePrice.formatted}
-                </span>
-                <Button size="sm" variant="outline">Add to Cart</Button>
-              </div>
-            </Card>
-          ))}
+              Autumn / Winter Archive
+            </Badge>
+            <h1
+              className="text-4xl font-bold tracking-tight"
+              style={{
+                fontSize: 'clamp(2.25rem, 4vw, 3.5rem)',
+                lineHeight: 1.1,
+                marginBottom: '1.25rem',
+              }}
+            >
+              Architectural silhouettes for everyday movement.
+            </h1>
+            <p
+              style={{
+                color: '#d4d4d8',
+                fontSize: '1.0625rem',
+                marginBottom: '2rem',
+                maxWidth: '36rem',
+              }}
+            >
+              Thoughtfully constructed garments milled from 280–450 GSM organic cotton,
+              merino wool, and Japanese technical twill.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Link href="/products">
+                <Button
+                  size="lg"
+                  style={{
+                    backgroundColor: '#fafafa',
+                    color: '#18181b',
+                    borderColor: '#fafafa',
+                  }}
+                >
+                  Shop Collection
+                  <ArrowRight size={16} />
+                </Button>
+              </Link>
+              <Link href="/categories">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  style={{
+                    borderColor: 'rgba(255, 255, 255, 0.35)',
+                    color: '#fafafa',
+                  }}
+                >
+                  Explore Categories
+                </Button>
+              </Link>
+            </div>
+          </div>
         </div>
+      </section>
+
+      {/* Curated Categories */}
+      <section aria-labelledby="home-categories-heading" className="store-container py-12">
+        <div className="mb-6 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Wardrobe Pillars
+            </p>
+            <h2 id="home-categories-heading" className="text-2xl font-bold tracking-tight">
+              Shop by Category
+            </h2>
+          </div>
+          <Link href="/categories" className="text-sm font-semibold">
+            View All Categories →
+          </Link>
+        </div>
+
+        {categories.length === 0 ? (
+          <EmptyState
+            icon={<Layers size={24} />}
+            title="Categories are being curated"
+            description={
+              apiErrorMessage ||
+              'Our seasonal categories will appear here as soon as they are published in the catalog.'
+            }
+            actionLabel="Browse All Products"
+            actionHref="/products"
+          />
+        ) : (
+          <div className="category-grid">
+            {categories.slice(0, 6).map((cat) => (
+              <Link
+                key={cat.id}
+                href={`/categories/${cat.slug}`}
+                className="flex flex-col justify-between rounded-xl border bg-surface p-6"
+                style={{
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #e5e2dc',
+                  borderRadius: '0.875rem',
+                  minHeight: '9.5rem',
+                  padding: '1.5rem',
+                }}
+              >
+                <div>
+                  <span className="text-xs uppercase tracking-wider text-muted">Collection</span>
+                  <h3 className="mt-1 text-xl font-bold">{cat.name}</h3>
+                  {cat.description && (
+                    <p className="mt-1 text-xs text-muted">{cat.description}</p>
+                  )}
+                </div>
+                <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider">
+                  Explore {cat.name} <ArrowRight size={13} />
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Featured Essentials */}
+      {featuredProducts.length > 0 && (
+        <section aria-labelledby="home-featured-heading" className="store-container py-8">
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+                Curated Selection
+              </p>
+              <h2 id="home-featured-heading" className="text-2xl font-bold tracking-tight">
+                Featured Essentials
+              </h2>
+            </div>
+            <Link href="/products?featured=1" className="text-sm font-semibold">
+              View Featured →
+            </Link>
+          </div>
+
+          <div className="product-grid">
+            {featuredProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* New Arrivals */}
+      <section aria-labelledby="home-new-arrivals-heading" className="store-container py-12">
+        <div className="mb-6 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Latest Release
+            </p>
+            <h2 id="home-new-arrivals-heading" className="text-2xl font-bold tracking-tight">
+              New Arrivals
+            </h2>
+          </div>
+          <Link href="/products" className="text-sm font-semibold">
+            View Full Catalog →
+          </Link>
+        </div>
+
+        {latestProducts.length === 0 ? (
+          <EmptyState
+            icon={<Sparkles size={24} />}
+            title="No published garments found"
+            description={
+              apiErrorMessage ||
+              'Published products from the Laravel Catalog API will appear here automatically.'
+            }
+            actionLabel="Search Archive"
+            actionHref="/search"
+          />
+        ) : (
+          <div className="product-grid">
+            {latestProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
