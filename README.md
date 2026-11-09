@@ -11,29 +11,30 @@ clothing-commerce-platform/
 │
 ├── apps/
 │   ├── web/                     # Next.js 16 App Router (Turbopack, React 19, Strict TS)
-│   │   ├── src/app/(store)/     # Customer-facing storefront routes
+│   │   ├── src/app/(store)/     # Customer-facing storefront routes (✅ Implemented)
 │   │   ├── src/app/(admin)/     # Backoffice administrative portal routes
 │   │   ├── src/app/api/health/  # Frontend healthcheck route
-│   │   ├── src/features/        # Domain-driven features (catalog, cart, checkout, orders, admin)
-│   │   ├── src/components/      # Reusable UI components & layouts
+│   │   ├── src/app/api/revalidate/ # Tag & path cache invalidation webhook (✅ Implemented)
+│   │   ├── src/features/        # Domain-driven features (catalog, cart, checkout, orders, customers, admin)
+│   │   ├── src/components/      # Reusable shadcn/ui primitives, shared states & layouts
 │   │   └── package.json
 │   │
 │   └── api/                     # Laravel 13 Modular Architecture (PHP 8.3+)
 │       ├── app/Modules/         # 13 Isolated business domains
-│       │   ├── Identity/        # Authentication, RBAC, Users, Audit Logs (✅ Implemented)
+│       │   ├── Identity/        # Authentication, RBAC, Users, Addresses, Audit Logs (✅ Implemented)
 │       │   ├── Catalog/         # Categories, Products, Variants, Images, Attributes (✅ Implemented)
-│       │   ├── Inventory/       # Stock levels, movements, reservations, warehouses
-│       │   ├── Cart/            # Session & persistent cart operations
-│       │   ├── Checkout/        # Two-stage checkout & price calculation
-│       │   ├── Orders/          # Order lifecycle, status machine, snapshots
+│       │   ├── Inventory/       # Warehouses, Stock items, Movements, Reservations, Reports (✅ Implemented)
+│       │   ├── Cart/            # Guest & Customer carts, Merging, Address & Coupon binding (✅ Implemented)
+│       │   ├── Checkout/        # Two-stage checkout quotes, Price/Stock revalidation, Order placement (✅ Implemented)
+│       │   ├── Orders/          # Order & OrderItem immutable snapshots, OrderPolicy (✅ Implemented)
+│       │   ├── Promotions/      # Coupons, Redemptions, Expiry & usage limit validation (✅ Implemented)
+│       │   ├── Shipping/        # Bangladesh Division/District shipping calculation & courier adapters (✅ Implemented)
 │       │   ├── Payments/        # Gateway adapters (bKash, Nagad, COD), refunds, webhooks
-│       │   ├── Promotions/      # Coupons, discounts, anti-abuse rules
-│       │   ├── Shipping/        # Courier adapters (Pathao, Steadfast, REDX), tracking
 │       │   ├── Customers/       # Customer profiles, wishlists, address books
 │       │   ├── Reviews/         # Ratings, reviews & moderation
 │       │   ├── Notifications/   # Asynchronous transactional email & SMS
 │       │   └── Reporting/       # Analytics, sales aggregation, read models
-│       ├── app/Shared/          # Contracts, Events, Exceptions, Money value objects
+│       ├── app/Shared/          # Contracts, Events, Exceptions, Money value objects, BD Validators
 │       ├── app/Jobs/            # Asynchronous Queue Jobs
 │       ├── routes/              # api.php, console.php (scheduler), web.php
 │       └── composer.json
@@ -54,7 +55,7 @@ clothing-commerce-platform/
 ├── docs/                        # Architecture, ADRs, database diagrams & workflows
 │   ├── architecture/            # System, backend, frontend & security architecture
 │   ├── database/                # Database design & ERD
-│   ├── api/                     # API conventions & OpenAPI contracts
+│   ├── api/                     # API conventions & Cart/Checkout API contracts
 │   ├── workflows/               # Business process workflows (checkout, orders, payments, etc.)
 │   ├── security/                # Security architecture & threat model
 │   ├── deployment/              # Deployment guide & runbooks
@@ -98,18 +99,18 @@ The backend is built around a **Modular Monolith** pattern inside `apps/api/app/
 
 | Module | Status | Entities & Capabilities | API Endpoints |
 | :--- | :---: | :--- | :--- |
-| **Identity** | ✅ Complete | Users, Roles, Permissions, Addresses, Audit Logs, Staff Authentication | `/api/auth/*`<br>`/api/admin/auth/*` |
+| **Identity** | ✅ Complete | Users, Roles, Permissions, Bangladesh Addresses, Audit Logs, Staff Authentication | `/api/auth/*`<br>`/api/account/*`<br>`/api/admin/auth/*` |
 | **Catalog** | ✅ Complete | Brands, Categories, Attributes, AttributeValues, Products, Variants, Images, Bulk Import, Search & Filtering | `/api/catalog/*`<br>`/api/admin/catalog/*` |
-| **Inventory** | ⏳ Next Up | Stock balances, warehouse locations, stock reservations, ledger movements | `/api/admin/inventory/*` |
-| **Cart** | 📋 Planned | Guest & authenticated shopping cart, line item calculations | `/api/cart/*` |
-| **Checkout** | 📋 Planned | Two-stage checkout orchestration, pricing engine, lock acquisition | `/api/checkout/*` |
-| **Orders** | 📋 Planned | Order state machine, item snapshots, status history, cancellations | `/api/orders/*`<br>`/api/admin/orders/*` |
-| **Payments** | 📋 Planned | Gateway adapters (bKash, Nagad, COD), payment verification, webhooks | `/api/payments/*`<br>`/api/webhooks/*` |
-| **Promotions** | 📋 Planned | Coupons, percentage/fixed discounts, usage quotas, anti-abuse rules | `/api/admin/promotions/*` |
-| **Shipping** | 📋 Planned | Courier integration (Pathao, Steadfast, REDX), consignment creation | `/api/shipping/*`<br>`/api/admin/shipments/*` |
-| **Customers** | 📋 Planned | Customer profiles, saved addresses, wishlists | `/api/customers/*` |
+| **Inventory** | ✅ Complete | Warehouses, InventoryItems, InventoryMovements, StockReservations, StockReservationItems, Low-Stock Alerts, Reporting | `/api/inventory/*`<br>`/api/admin/inventory/*` |
+| **Cart** | ✅ Complete | Guest & Customer carts, Idempotent cart merging, Item CRUD, Address & Coupon binding | `/api/cart/*` |
+| **Checkout** | ✅ Complete | Two-stage checkout quotes (`quote_token`), Price/Stock revalidation, Row locking, Idempotent order placement | `/api/checkout/*` |
+| **Orders** | ✅ Complete | Immutable `Order` & `OrderItem` snapshots, COD & Online payment preparation, `OrderPolicy` | `/api/account/orders`<br>`/api/checkout/orders/*` |
+| **Promotions** | ✅ Complete | Coupons (`percentage` & `fixed_amount`), Redemptions, Expiry & usage limit validation | `/api/cart/coupon`<br>`/api/checkout/validate-coupon` |
+| **Shipping** | ✅ Complete | Bangladesh 8-Division / District shipping calculation (Dhaka Metro, Sub-Area, Outside Dhaka, Pickup) | `/api/checkout/shipping-rates` |
+| **Payments** | ⏳ Next Up | Gateway webhook verification & settlement adapters (bKash, Nagad, SSLCommerz) | `/api/payments/*`<br>`/api/webhooks/*` |
+| **Customers** | ✅ Complete | Customer profile management, Bangladesh address book, order history | `/api/account/*` |
 | **Reviews** | 📋 Planned | Verified buyer reviews, star ratings, moderation workflows | `/api/reviews/*` |
-| **Notifications** | 📋 Planned | Asynchronous transactional emails, SMS alerts, in-app notifications | Internal Queue |
+| **Notifications** | 📋 Planned | Asynchronous transactional emails, SMS alerts, low-stock alerts | Internal Queue |
 | **Reporting** | 📋 Planned | Sales summaries, revenue trends, inventory velocity read-models | `/api/admin/reports/*` |
 
 ---
@@ -119,7 +120,7 @@ The backend is built around a **Modular Monolith** pattern inside `apps/api/app/
 ### 1. Identity Module (`app/Modules/Identity`)
 - **Authentication**: Laravel Sanctum stateful cookies for SPA and tokens for API clients.
 - **Role-Based Access Control**: Managed via `spatie/laravel-permission` with seeders and migration guarantees.
-- **Address Management**: Multi-address management (billing/shipping) with default flag protection.
+- **Bangladesh Address Management**: Multi-address management (`division`, `district`, `upazila_thana`, `street_address`, `postal_code`, `phone`) with default flag protection.
 - **Audit Logging**: Asynchronous audit recording for security and administrative operations.
 
 ### 2. Catalog Module (`app/Modules/Catalog`)
@@ -132,51 +133,87 @@ The backend is built around a **Modular Monolith** pattern inside `apps/api/app/
   - `ProductImage`: Storage disk abstraction (`disk`, `path`), URL accessor, display order (`sort_order`), and primary flag (`is_primary`).
   - `VariantAttributeValue`: Pivot associating variants with dynamic attribute values.
 - **Architectural Rules Enforced**:
-  - **Financial Precision**: All prices (`price`, `compare_at_price`, `cost_price`) are strictly validated and stored as positive **integers** in smallest currency subunits (cents/paisa). Floating-point arithmetic is prohibited.
+  - **Financial Precision**: All prices (`price_amount`, `compare_at_price`, `cost_price`) are strictly validated and stored as positive **integers** in smallest currency subunits (paisa). Floating-point arithmetic is prohibited.
   - **Zero Public Leaks**: Public storefront routes enforce strict `published()` query scopes. Drafts, archived items, future-dated products, and inactive categories return HTTP 404 to unauthenticated store visitors.
   - **Storage Abstraction**: Product image uploads utilize Laravel's `Storage` facade (`disk` + `path`). Images are never tied to hardcoded local file paths.
-  - **Category Tree Integrity**: Circular parenting prevention (a category cannot be its own parent) and orphan protection on category deletion (children safely set `parent_id = null`).
+  - **Category Tree Integrity**: Circular parenting prevention and orphan protection on category deletion (`parent_id = null`).
   - **Bulk Import Foundation**: Extensible CSV/JSON product and variant importer (`ImportService`) executed within database transactions.
+
+### 3. Inventory Module (`app/Modules/Inventory`)
+- **Entities**:
+  - `Warehouse`: Multi-warehouse support with priority ordering, active status, and default fulfillment routing.
+  - `InventoryItem`: Per-variant, per-warehouse stock balances (`quantity_on_hand`, `quantity_reserved`, `low_stock_threshold`) where $\text{available stock} = \text{quantity\_on\_hand} - \text{quantity\_reserved}$.
+  - `InventoryMovement`: Immutable ledger of every stock modification (`adjustment`, `restock`, `sale`, `reservation`, `release`, `expiry`, `transfer_in`, `transfer_out`).
+  - `StockReservation` & `StockReservationItem`: Idempotent, TTL-bound stock reservations across warehouses.
+- **Architectural Rules Enforced**:
+  - **Never Negative Stock**: Pessimistic row-level locking (`SELECT ... FOR UPDATE`) in deterministic ascending ID order inside `DB::transaction` prevents overselling and deadlocks under concurrent load.
+  - **Module Isolation**: External modules (`Catalog`, `Cart`, `Checkout`, `Orders`) are strictly forbidden from mutating inventory tables directly and must communicate through `App\Shared\Contracts\Inventory\InventoryServiceContract` (`InventoryWriteGuard` enforces runtime isolation).
+  - **Scheduled Expiry**: `php artisan inventory:expire-reservations` runs every minute via the Laravel scheduler to release overdue reservations and record ledger movements.
+  - **Low-Stock Notifications**: Queued `SendLowStockAlertJob` and `LowStockAlertNotification` dispatch alerts when available stock crosses `low_stock_threshold`.
+
+### 4. Cart & Checkout Modules (`app/Modules/Cart`, `app/Modules/Checkout`, `app/Modules/Orders`, `app/Modules/Promotions`, `app/Modules/Shipping`)
+- **Capabilities**:
+  - **Guest & Customer Carts**: Identified via `X-Guest-Token` / `guest_token` or authenticated `user_id`.
+  - **Idempotent Cart Merging**: `POST /api/cart/merge` merges guest cart items, coupon, and address into the customer's cart under row locks without duplicating quantities on retry.
+  - **Bangladesh Localization**: Enforces `BDT` (`৳`) currency, Bangladesh mobile phone validation (`^(?:\+?8801|01)[3-9]\d{8}$`), and 8 Bangladesh Divisions (`Dhaka`, `Chattogram`, `Rajshahi`, `Khulna`, `Barishal`, `Sylhet`, `Rangpur`, `Mymensingh`), `district`, and `upazila_thana`.
+  - **Coupon & Shipping Calculation**: Validates percentage and fixed-amount coupons (`CouponService`), expiry timestamps, usage limits, and minimum order amounts; computes zone-based Bangladesh shipping rates (`ShippingCalculationService`).
+  - **Two-Stage Checkout (`CheckoutQuote` & `Order`)**:
+    1. `POST /api/checkout/quote` revalidates variants and stock, calculates authoritative BDT totals in integer paisa (`Money`), and issues a 15-minute `quote_token`.
+    2. `POST /api/checkout/orders` enforces idempotency (`Idempotency-Key`), detects variant price drift (`PriceChangedException`, HTTP `409`) and expired quotes (`QuoteExpiredException`, HTTP `422`), locks inventory rows via `InventoryServiceContract::reserveStock`, persists immutable `Order` and `OrderItem` snapshots, and prepares COD or online payment metadata (`ready_for_gateway`) while never holding DB locks during external callbacks.
+
+### 5. Next.js 16 Customer Storefront (`apps/web`)
+- **Pages (`src/app/(store)`)**:
+  - Homepage (`/`), Category Index (`/categories`) & Category Detail (`/categories/[slug]`), Product Listing (`/products`), Product Details (`/products/[slug]`), Search (`/search`), Cart (`/cart`), Checkout (`/checkout`), Customer Account (`/account`, `/login`, `/register`), and Order History (`/account/orders`, `/orders`).
+- **Architectural Rules Enforced**:
+  - **Server Components by Default**: Public catalog pages render as React Server Components with dynamic `generateMetadata`, canonical URLs, and Schema.org `Product` + `AggregateOffer` JSON-LD structured data.
+  - **Zero Client Price Calculation**: Cart and Checkout views never compute authoritative totals on the client; all prices, discounts, shipping fees, and 5% VAT come from `/api/checkout/quote`.
+  - **Customer Data Privacy & Cache Invalidation**: Private routes (`/account`, `/orders`, `/cart`, `/checkout`) enforce `export const dynamic = 'force-dynamic'` and `cache: 'no-store'`, while public catalog caches are invalidated via `POST /api/revalidate`.
 
 ---
 
-## Catalog API Reference
+## API Reference
 
-### Public Storefront Routes (`/api/catalog/*`)
-*No authentication required. Only active categories and published products are accessible.*
+### 1. Catalog API (`/api/catalog/*` & `/api/admin/catalog/*`)
 
-| Method | Endpoint | Description | Query Parameters |
+| Method | Endpoint | Description | Access |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/catalog/categories` | List active categories (root categories with active children) | — |
-| `GET` | `/api/catalog/categories/{slug}` | Get category details with active descendant categories | — |
-| `GET` | `/api/catalog/products` | Paginated product listing with filters and sorting | `search`, `category`, `brand`, `min_price`, `max_price`, `color`, `size`, `sort`, `per_page` |
-| `GET` | `/api/catalog/products/{slug}` | Get detailed published product (with brand, category, images, active variants) | — |
+| `GET` | `/api/catalog/categories` | List active root categories with active children | Public |
+| `GET` | `/api/catalog/categories/{slug}` | Get category details with active descendants | Public |
+| `GET` | `/api/catalog/products` | Paginated product listing (`search`, `category`, `brand`, `color`, `size`, `sort`) | Public |
+| `GET` | `/api/catalog/products/{slug}` | Get published product with brand, category, images, and active variants | Public |
+| `GET/POST` | `/api/admin/catalog/categories` | List / create categories (`GET /tree` for full hierarchy) | Staff |
+| `GET/POST/PUT/DELETE` | `/api/admin/catalog/products/{id}` | Full product, variant, image, publish/unpublish & bulk import management | Staff |
 
-### Admin Backoffice Routes (`/api/admin/catalog/*`)
-*Requires `auth:sanctum` and staff privileges.*
+### 2. Inventory API (`/api/inventory/*` & `/api/admin/inventory/*`)
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/admin/catalog/categories/tree` | Full hierarchical category tree |
-| `GET` | `/api/admin/catalog/categories` | Paginated category list |
-| `POST` | `/api/admin/catalog/categories` | Create new category (HTTP 201) |
-| `GET` | `/api/admin/catalog/categories/{id}` | Get category detail |
-| `PUT` | `/api/admin/catalog/categories/{id}` | Update category |
-| `DELETE` | `/api/admin/catalog/categories/{id}` | Delete category (orphans children safely) |
-| `GET` | `/api/admin/catalog/products` | List all products (drafts, published, archived) with admin filters |
-| `POST` | `/api/admin/catalog/products` | Create product (HTTP 201) |
-| `GET` | `/api/admin/catalog/products/{id}` | Get product detail |
-| `PUT` | `/api/admin/catalog/products/{id}` | Update product metadata, brand, category, SEO |
-| `DELETE` | `/api/admin/catalog/products/{id}` | Delete product and cascading images/variants |
-| `POST` | `/api/admin/catalog/products/{id}/publish` | Transition status to `published` |
-| `POST` | `/api/admin/catalog/products/{id}/unpublish`| Transition status to `draft` |
-| `POST` | `/api/admin/catalog/products/{id}/variants` | Create product variant (HTTP 201) |
-| `PUT` | `/api/admin/catalog/products/{id}/variants/{variantId}` | Update variant SKU, prices, color, size |
-| `DELETE` | `/api/admin/catalog/products/{id}/variants/{variantId}` | Delete variant |
-| `POST` | `/api/admin/catalog/products/{id}/images` | Upload product image using storage abstraction |
-| `POST` | `/api/admin/catalog/products/{id}/images/reorder` | Batch update image sort orders |
-| `DELETE` | `/api/admin/catalog/products/{id}/images/{imageId}` | Delete image file from storage and database |
-| `POST` | `/api/admin/catalog/products/import` | Bulk import products via CSV or JSON payload |
+| Method | Endpoint | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/inventory/variants/{variant}/availability` | Live stock summary (`in_stock`, `is_low_stock`, `total_available`) | Public |
+| `GET/POST/PUT/DELETE` | `/api/admin/inventory/warehouses` | Manage fulfillment warehouses | Staff |
+| `GET/PUT` | `/api/admin/inventory/items` | Inspect and configure inventory item thresholds | Staff |
+| `POST` | `/api/admin/inventory/adjust` | Transactional stock adjustment with ledger movement | Staff |
+| `POST` | `/api/admin/inventory/set-stock` | Set exact on-hand quantity with audit movement | Staff |
+| `POST` | `/api/admin/inventory/transfer` | Atomic inter-warehouse stock transfer | Staff |
+| `GET` | `/api/admin/inventory/movements` | Immutable stock movement history ledger | Staff |
+| `GET/POST` | `/api/admin/inventory/reservations` | Create, list, commit, release, or expire stock reservations | Staff |
+| `GET` | `/api/admin/inventory/reports/{summary\|low-stock\|warehouses\|movements}` | Inventory analytics and low-stock reporting | Staff |
+
+### 3. Cart & Checkout API (`/api/cart/*` & `/api/checkout/*`)
+
+| Method | Endpoint | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/cart` | Retrieve active customer or guest cart (`X-Guest-Token`) | Public / Auth |
+| `POST` | `/api/cart/items` | Add variant to cart with stock & variant revalidation | Public / Auth |
+| `PUT/PATCH/DELETE` | `/api/cart/items/{item}` | Update item quantity or remove item from cart | Public / Auth |
+| `PUT/POST` | `/api/cart/address` | Select saved `address_id` or set Bangladesh `shipping_address` | Public / Auth |
+| `POST/DELETE` | `/api/cart/coupon` | Apply or remove promotional coupon code | Public / Auth |
+| `POST` | `/api/cart/merge` | Idempotently merge guest cart into authenticated customer cart | Auth (`sanctum`) |
+| `POST` | `/api/checkout/quote` | Generate authoritative BDT `CheckoutQuote` (`quote_token`, 15m TTL) | Public / Auth |
+| `POST` | `/api/checkout/validate-coupon` | Validate coupon code against subtotal in BDT paisa | Public / Auth |
+| `POST` | `/api/checkout/shipping-rates` | Calculate BDT shipping fees for Bangladesh `division` & `district` | Public / Auth |
+| `POST` | `/api/checkout/orders` | Idempotent order placement (`Idempotency-Key`, COD or Online prep) | Public / Auth |
+| `GET` | `/api/checkout/orders/{orderNumber}` | Retrieve order snapshot (protected by `OrderPolicy`) | Owner / Staff |
+| `GET` | `/api/account/orders` | List authenticated customer's order history | Auth (`sanctum`) |
 
 ---
 
@@ -270,17 +307,20 @@ Run comprehensive verification across both the frontend monorepo packages and th
 ```bash
 cd apps/api
 
-# Run all feature tests
+# Run all unit and feature tests (Identity, Catalog, Inventory, Cart & Checkout)
 php artisan test
 
-# Run Catalog module feature tests specifically
+# Run specific domain test suites
+php artisan test --filter=Inventory
+php artisan test --filter=CartAndCheckoutTest
+php artisan test --filter=CheckoutDomainUnitTest
 php artisan test --filter=Catalog
 
 # Verify queue job dispatch and execution
 php artisan test:dispatch-job
 php artisan queue:work --once
 
-# Verify scheduler run
+# Verify scheduler run (including inventory:expire-reservations)
 php artisan schedule:run
 ```
 
@@ -312,7 +352,7 @@ pnpm --filter web build
 ## Background Workers & Scheduling
 
 ### Queue Worker
-Heavy workflows (image processing, catalog sync, notifications, invoice generation) implement `Illuminate\Contracts\Queue\ShouldQueue`:
+Heavy workflows (image processing, catalog sync, low-stock notifications, invoice generation) implement `Illuminate\Contracts\Queue\ShouldQueue`:
 
 ```bash
 cd apps/api
@@ -324,7 +364,7 @@ php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
 In Docker environments, workers are managed automatically by the `queue` service via Supervisor (`infrastructure/supervisor/supervisord.conf`).
 
 ### Scheduler
-Scheduled tasks are registered in `apps/api/routes/console.php`:
+Scheduled tasks are registered in `apps/api/routes/console.php` (including `inventory:expire-reservations`):
 
 ```bash
 # List all active schedules
@@ -368,6 +408,8 @@ The GitHub Actions pipeline at `.github/workflows/ci.yml` validates every pull r
 | Document | Description |
 | :--- | :--- |
 | [AGENTS.md](./AGENTS.md) | Architectural invariants, security policies, and contribution guidelines |
+| [docs/api/cart_and_checkout_api.md](./docs/api/cart_and_checkout_api.md) | Cart, Checkout Quote, Bangladesh Shipping, Coupon, and Order Placement API contracts |
+| [docs/api/api_conventions.md](./docs/api/api_conventions.md) | REST API design conventions, status codes, and error payloads |
 | [docs/workflows/Planning.md](./docs/workflows/Planning.md) | Comprehensive system architecture and domain blueprint |
 | [docs/workflows/README.md](./docs/workflows/README.md) | Workflow directory and domain dependency map |
 | [docs/workflows/product_publishing_workflow.md](./docs/workflows/product_publishing_workflow.md) | Product lifecycle, variant validation, and cache invalidation rules |
@@ -382,7 +424,6 @@ The GitHub Actions pipeline at `.github/workflows/ci.yml` validates every pull r
 | [docs/architecture/backend_architecture.md](./docs/architecture/backend_architecture.md) | Laravel modular monolith structure and conventions |
 | [docs/architecture/frontend_architecture.md](./docs/architecture/frontend_architecture.md) | Next.js 16 App Router layout, state management, and RSC design |
 | [docs/database/database-design.md](./docs/database/database-design.md) | Relational database schema, ERD, and indexing strategies |
-| [docs/api/api_conventions.md](./docs/api/api_conventions.md) | REST API design conventions, status codes, and error payloads |
 | [docs/security/security-architecture.md](./docs/security/security-architecture.md) | Security framework, threat model, and defense-in-depth policies |
 | [docs/deployment/deployment-guide.md](./docs/deployment/deployment-guide.md) | Production deployment, container setup, and rollback instructions |
 | [docs/adr/](./docs/adr/) | Architectural Decision Records |
@@ -394,14 +435,14 @@ The GitHub Actions pipeline at `.github/workflows/ci.yml` validates every pull r
 | Phase | Milestone | Focus Area | Status |
 | :---: | :--- | :--- | :---: |
 | **01** | Foundation | Monorepo setup, Docker environments, Next.js 16, Laravel 13, CI | ✅ Complete |
-| **02** | Identity & Auth | Sanctum auth, Spatie RBAC, user profiles, address book, audit logs | ✅ Complete |
+| **02** | Identity & Auth | Sanctum auth, Spatie RBAC, user profiles, Bangladesh address book, audit logs | ✅ Complete |
 | **03** | Catalog Management | Brands, categories, attributes, products, variants, images, search/filtering, bulk import | ✅ Complete |
-| **04** | Inventory Management | Stock balances, warehouse locations, stock reservations, ledger movements | ⏳ Next Up |
-| **05** | Storefront Portal | Customer catalog browsing, category tree, faceted filters, product details, SEO | 🔲 Planned |
-| **06** | Cart & Checkout | Session & persistent cart, two-stage checkout, pricing engine, lock acquisition | 🔲 Planned |
-| **07** | Orders & Payments | Order lifecycle state machine, bKash / Nagad / COD payment flows, webhooks | 🔲 Planned |
+| **04** | Inventory Management | Multi-warehouse stock balances, movements ledger, idempotent reservations, scheduled expiry, low-stock alerts | ✅ Complete |
+| **05** | Storefront Portal | Next.js 16 RSC storefront, category & product pages, image gallery, live stock selector, SEO & JSON-LD | ✅ Complete |
+| **06** | Cart & Checkout | Guest & customer carts, cart merging, Bangladesh shipping/phone validation, coupons, quotes, idempotent orders | ✅ Complete |
+| **07** | Orders & Payments | Order fulfillment state machine, bKash / Nagad / SSLCommerz webhook verification | ⏳ Next Up |
 | **08** | Admin Operations | Backoffice catalog management, inventory adjustments, order fulfillment | 🔲 Planned |
 | **09** | Courier Integration | Pathao, Steadfast, REDX automated consignments, tracking, COD reconciliation | 🔲 Planned |
-| **10** | Promotions & Reviews | Coupon validation engine, customer reviews, ratings moderation, wishlists | 🔲 Planned |
+| **10** | Promotions & Reviews | Customer product reviews, ratings moderation, wishlists | 🔲 Planned |
 | **11** | Quality & Hardening | E2E test suites, security penetration review, load testing, performance tuning | 🔲 Planned |
 | **12** | Production Launch | Automated deployment pipeline, database backup routines, monitoring, smoke tests | 🔲 Planned |

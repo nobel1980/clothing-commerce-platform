@@ -687,4 +687,54 @@ class CartAndCheckoutTest extends TestCase
         $this->assertSame('Bogra', $freshOrder->shipping_address_snapshot['district']);
         $this->assertSame('Sadar', $freshOrder->shipping_address_snapshot['upazila_thana']);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 11. Authorization & Cross-Tenant Isolation
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function test_unauthorized_order_and_quote_access_is_blocked(): void
+    {
+        $customerA = User::factory()->create();
+        $customerB = User::factory()->create();
+
+        // Customer A generates a quote
+        $quoteRes = $this->actingAs($customerA, 'sanctum')
+            ->postJson('/api/checkout/quote', [
+                'items'            => [['variant_id' => $this->variantA->id, 'quantity' => 1]],
+                'shipping_address' => $this->validBangladeshAddress(),
+            ])->assertOk();
+
+        $quoteToken = $quoteRes->json('data.quote_token');
+
+        // Customer B attempts to place an order using Customer A's quote_token -> 403 Forbidden
+        $this->actingAs($customerB, 'sanctum')
+            ->postJson('/api/checkout/orders', [
+                'idempotency_key'  => 'cross-user-quote-hijack',
+                'quote_token'      => $quoteToken,
+                'payment_method'   => 'cod',
+                'shipping_address' => $this->validBangladeshAddress(),
+            ])->assertStatus(403);
+
+        // Customer A places the order legitimately
+        $orderRes = $this->actingAs($customerA, 'sanctum')
+            ->postJson('/api/checkout/orders', [
+                'idempotency_key'  => 'legit-customer-a-order',
+                'quote_token'      => $quoteToken,
+                'payment_method'   => 'cod',
+                'shipping_address' => $this->validBangladeshAddress(),
+            ])->assertCreated();
+
+        $orderNumber = $orderRes->json('data.order_number');
+
+        // Customer B cannot view Customer A's order -> 403 Forbidden
+        $this->actingAs($customerB, 'sanctum')
+            ->getJson("/api/checkout/orders/{$orderNumber}")
+            ->assertStatus(403);
+
+        // Customer A can view their own order -> 200 OK
+        $this->actingAs($customerA, 'sanctum')
+            ->getJson("/api/checkout/orders/{$orderNumber}")
+            ->assertOk()
+            ->assertJsonPath('data.order_number', $orderNumber);
+    }
 }

@@ -232,6 +232,16 @@ class StoreCheckoutQuoteController extends Controller
             ->where('order_number', $orderNumber)
             ->firstOrFail();
 
+        $user = $request->user('sanctum') ?? $request->user();
+        $guestToken = $this->resolveGuestToken($request);
+
+        $policy = app(\App\Modules\Orders\Policies\OrderPolicy::class);
+        if (!$policy->view($user, $order, $guestToken)) {
+            return response()->json([
+                'message' => 'You are not authorized to view this order.',
+            ], 403);
+        }
+
         return response()->json([
             'data' => $this->checkoutService->formatOrder($order),
         ]);

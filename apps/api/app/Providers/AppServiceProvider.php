@@ -46,6 +46,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(\App\Modules\Inventory\Models\Warehouse::class, \App\Modules\Inventory\Policies\InventoryPolicy::class);
         Gate::policy(\App\Modules\Inventory\Models\InventoryItem::class, \App\Modules\Inventory\Policies\InventoryPolicy::class);
         Gate::policy(\App\Modules\Inventory\Models\StockReservation::class, \App\Modules\Inventory\Policies\InventoryPolicy::class);
+
+        // Order policies
+        Gate::policy(\App\Modules\Orders\Models\Order::class, \App\Modules\Orders\Policies\OrderPolicy::class);
     }
 }
 

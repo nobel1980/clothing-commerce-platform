@@ -51,6 +51,9 @@ class CheckoutService
 
         if (!empty($input['cart_id'])) {
             $cart = Cart::query()->with('items')->find((int) $input['cart_id']);
+            if ($cart !== null) {
+                $this->assertCartOwnership($cart, $userId, $guestToken);
+            }
         } elseif (!isset($input['items'])) {
             $cart = $this->cartService->resolveCart($userId, $guestToken, false);
         }
@@ -322,6 +325,8 @@ class CheckoutService
                         throw new QuoteExpiredException($quoteToken, "Checkout quote '{$quoteToken}' was not found.");
                     }
 
+                    $this->assertQuoteOwnership($quote, $userId, $guestToken);
+
                     if ($quote->status === 'converted' && $quote->converted_order_id !== null) {
                         $convertedOrder = Order::query()->with('items')->find($quote->converted_order_id);
                         if ($convertedOrder !== null) {
@@ -345,6 +350,9 @@ class CheckoutService
                         ->where('id', (int) $input['cart_id'])
                         ->lockForUpdate()
                         ->first();
+                    if ($cart !== null) {
+                        $this->assertCartOwnership($cart, $userId, $guestToken);
+                    }
                 } elseif ($quote?->cart_id !== null) {
                     $cart = Cart::query()
                         ->with('items')
@@ -956,5 +964,31 @@ class CheckoutService
         ];
 
         return hash('sha256', json_encode($payload));
+    }
+
+    private function assertCartOwnership(Cart $cart, ?int $userId, ?string $guestToken): void
+    {
+        if ($cart->user_id !== null && (int) $cart->user_id !== (int) $userId) {
+            throw new CheckoutException('You are not authorized to access this cart.', 403, 'cart_id');
+        }
+
+        if ($cart->user_id === null && $cart->guest_token !== null && $guestToken !== null) {
+            if (!hash_equals((string) $cart->guest_token, trim($guestToken))) {
+                throw new CheckoutException('Guest token does not match the requested cart.', 403, 'cart_id');
+            }
+        }
+    }
+
+    private function assertQuoteOwnership(CheckoutQuote $quote, ?int $userId, ?string $guestToken): void
+    {
+        if ($quote->user_id !== null && (int) $quote->user_id !== (int) $userId) {
+            throw new CheckoutException('You are not authorized to use this checkout quote.', 403, 'quote_token');
+        }
+
+        if ($quote->user_id === null && $quote->guest_token !== null && $guestToken !== null) {
+            if (!hash_equals((string) $quote->guest_token, trim($guestToken))) {
+                throw new CheckoutException('Guest token does not match the checkout quote.', 403, 'quote_token');
+            }
+        }
     }
 }
