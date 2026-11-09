@@ -22,5 +22,26 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        $exceptions->render(function (\App\Shared\Exceptions\Inventory\InventoryException $e, \Illuminate\Http\Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'errors'  => [
+                        'inventory' => [$e->getMessage()],
+                    ],
+                ], $e->statusCode());
+            }
+        });
+
+        $exceptions->render(function (\App\Shared\Exceptions\Checkout\CheckoutException $e, \Illuminate\Http\Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'message' => $e->getMessage(),
+                    'errors'  => [
+                        $e->errorField() => [$e->getMessage()],
+                    ],
+                    'context' => $e->context(),
+                ], $e->statusCode());
+            }
+        });
     })->create();

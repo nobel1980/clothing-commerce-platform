@@ -13,7 +13,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(
+            \App\Shared\Contracts\Inventory\InventoryServiceContract::class,
+            \App\Modules\Inventory\Services\InventoryService::class
+        );
     }
 
     /**
@@ -22,6 +25,12 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Schema::defaultStringLength(191);
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                \App\Modules\Inventory\Commands\ExpireReservationsCommand::class,
+            ]);
+        }
 
         // Implicitly grant 'super_admin' role all permission checks
         Gate::before(function ($user, $ability) {
@@ -32,6 +41,11 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(\App\Modules\Identity\Models\User::class, \App\Modules\Identity\Policies\UserPolicy::class);
         Gate::policy(\App\Modules\Identity\Models\Address::class, \App\Modules\Identity\Policies\AddressPolicy::class);
         Gate::policy(\Spatie\Permission\Models\Role::class, \App\Modules\Identity\Policies\RolePolicy::class);
+
+        // Inventory policies
+        Gate::policy(\App\Modules\Inventory\Models\Warehouse::class, \App\Modules\Inventory\Policies\InventoryPolicy::class);
+        Gate::policy(\App\Modules\Inventory\Models\InventoryItem::class, \App\Modules\Inventory\Policies\InventoryPolicy::class);
+        Gate::policy(\App\Modules\Inventory\Models\StockReservation::class, \App\Modules\Inventory\Policies\InventoryPolicy::class);
     }
 }
 

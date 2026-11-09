@@ -19,4 +19,9 @@ Schedule::call(function () {
     Log::info('[Scheduler] Heartbeat scheduled task executed successfully.');
 })->everyMinute()->name('heartbeat-scheduler');
 
+Schedule::command('inventory:expire-reservations')
+    ->everyMinute()
+    ->name('inventory-expire-reservations')
+    ->withoutOverlapping();
+
 Schedule::command('queue:prune-failed --hours=48')->daily();

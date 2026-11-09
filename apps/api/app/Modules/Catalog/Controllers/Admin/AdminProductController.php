@@ -50,7 +50,7 @@ class AdminProductController extends Controller
     /**
      * POST /admin/catalog/products
      */
-    public function store(StoreProductRequest $request): ProductResource
+    public function store(StoreProductRequest $request): JsonResponse
     {
         $product = $this->productService->create($request->validated());
         return (new ProductResource($product->load(['brand', 'category', 'images', 'variants'])))
