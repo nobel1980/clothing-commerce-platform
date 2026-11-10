@@ -8,6 +8,7 @@ vendor/
 out/
 build/
 dist/
+.test-dist/
 
 # Laravel
 apps/api/storage/*.key

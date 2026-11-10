@@ -1,11 +1,26 @@
+import { timingSafeEqual } from 'node:crypto';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { NextResponse, type NextRequest } from 'next/server';
 
+function secretsMatch(expected: string, provided: string): boolean {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(provided);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export async function POST(request: NextRequest) {
   const configuredSecret = process.env.REVALIDATION_SECRET;
-  const providedSecret = request.headers.get('x-revalidation-secret');
+  const providedSecret = request.headers.get('x-revalidation-secret') ?? '';
 
-  if (configuredSecret && providedSecret !== configuredSecret) {
+  // Fail closed: without a configured secret nobody may trigger cache invalidation.
+  if (!configuredSecret) {
+    return NextResponse.json(
+      { revalidated: false, message: 'Revalidation is not configured.' },
+      { status: 503 }
+    );
+  }
+
+  if (!secretsMatch(configuredSecret, providedSecret)) {
     return NextResponse.json(
       { revalidated: false, message: 'Invalid revalidation token.' },
       { status: 401 }

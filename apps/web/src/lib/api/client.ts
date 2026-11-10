@@ -76,6 +76,7 @@ export async function apiRequest<T>(
     cleanEndpoint.startsWith('/auth') ||
     cleanEndpoint.startsWith('/checkout') ||
     cleanEndpoint.startsWith('/orders') ||
+    cleanEndpoint.startsWith('/payments') ||
     method !== 'GET';
 
   const requestHeaders: Record<string, string> = {

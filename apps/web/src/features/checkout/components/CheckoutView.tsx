@@ -6,7 +6,12 @@ import { CheckCircle2, Lock, ShieldCheck, Truck } from 'lucide-react';
 import type { Order } from '@clothing-commerce/types';
 import { useCart, type ShippingMethodOption } from '@/features/cart/hooks/useCart';
 import { useMutation } from '@/lib/query';
-import { placeStoreOrder } from '@/features/orders/api/ordersApi';
+import {
+  initiatePayment,
+  isOnlinePaymentMethod,
+  placeStoreOrder,
+  type CheckoutPaymentMethod,
+} from '@/features/orders/api/ordersApi';
 import { formatMoney } from '@/lib/utils/format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,8 +46,20 @@ export function CheckoutView() {
   const [city, setCity] = React.useState('Dhaka');
   const [state, setState] = React.useState('Dhaka');
   const [postalCode, setPostalCode] = React.useState('1212');
-  const [paymentMethod, setPaymentMethod] = React.useState<'cod' | 'card' | 'bkash'>('cod');
+  const [paymentMethod, setPaymentMethod] = React.useState<CheckoutPaymentMethod>('cod');
   const [confirmedOrder, setConfirmedOrder] = React.useState<Order | null>(null);
+
+  // Online payment is started only after the order exists; the backend reads the amount
+  // from the order, so no price is ever sent from the browser. Retrying reuses the same key.
+  const paymentMutation = useMutation({
+    mutationFn: (order: Order) =>
+      initiatePayment(order.orderNumber, paymentMethod, `pay-${idempotencyKey}`),
+    onSuccess: (result) => {
+      if (result.redirectUrl) {
+        window.location.assign(result.redirectUrl);
+      }
+    },
+  });
 
   const placeOrderMutation = useMutation({
     mutationFn: () =>
@@ -69,23 +86,69 @@ export function CheckoutView() {
     onSuccess: (order) => {
       setConfirmedOrder(order);
       clearCart();
+      if (isOnlinePaymentMethod(paymentMethod)) {
+        paymentMutation.mutate(order);
+      }
     },
   });
 
   if (confirmedOrder) {
+    const isOnline = isOnlinePaymentMethod(paymentMethod);
+
     return (
       <Card style={{ maxWidth: '42rem', margin: '0 auto' }}>
         <CardHeader>
           <div className="flex items-center gap-2 text-success">
             <CheckCircle2 size={24} />
-            <CardTitle>Order Confirmed — #{confirmedOrder.orderNumber}</CardTitle>
+            <CardTitle>
+              {isOnline ? 'Order Placed' : 'Order Confirmed'} — #{confirmedOrder.orderNumber}
+            </CardTitle>
           </div>
           <CardDescription>
-            Thank you, {confirmedOrder.shippingAddress.fullName}. Your inventory reservation has
-            been committed and your order is being prepared.
+            {isOnline
+              ? `Thank you, ${confirmedOrder.shippingAddress.fullName}. Your items are reserved while we take you to the payment page. The order is confirmed once the payment is verified.`
+              : `Thank you, ${confirmedOrder.shippingAddress.fullName}. Your items are reserved and your order is being prepared. Pay in cash on delivery.`}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {isOnline && paymentMutation.isPending && (
+            <div role="status" aria-live="polite" className="text-sm">
+              Redirecting to secure payment…
+            </div>
+          )}
+          {isOnline && paymentMutation.error && (
+            <Alert variant="destructive" role="alert">
+              <p>We couldn&apos;t start the payment: {paymentMutation.error.message}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => paymentMutation.mutate(confirmedOrder)}
+              >
+                Retry Payment
+              </Button>
+              <p className="mt-2 text-xs">
+                Your order is saved. You can also retry later from your order history.
+              </p>
+            </Alert>
+          )}
+          {isOnline &&
+            paymentMutation.isSuccess &&
+            !paymentMutation.data?.redirectUrl && (
+              <Alert variant="destructive" role="alert">
+                The payment provider did not return a payment page. Please retry.
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => paymentMutation.mutate(confirmedOrder)}
+                >
+                  Retry Payment
+                </Button>
+              </Alert>
+            )}
           <div className="rounded-lg bg-muted p-4 text-sm">
             <p className="font-semibold">Shipping Destination</p>
             <p className="mt-1 text-xs text-muted">
@@ -312,8 +375,9 @@ export function CheckoutView() {
             {(
               [
                 { id: 'cod', label: 'Cash on Delivery (COD)' },
-                { id: 'card', label: 'Credit / Debit Card' },
-                { id: 'bkash', label: 'bKash Mobile Wallet' },
+                { id: 'bkash', label: 'bKash' },
+                { id: 'nagad', label: 'Nagad' },
+                { id: 'sslcommerz', label: 'Card / Mobile Banking (SSLCommerz)' },
               ] as const
             ).map((pm) => {
               const active = paymentMethod === pm.id;

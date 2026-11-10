@@ -40,7 +40,7 @@ class StoreCheckoutQuoteController extends Controller
             'promo_code'               => ['nullable', 'string', 'max:64'],
             'coupon_code'              => ['nullable', 'string', 'max:64'],
             'shipping_method'          => ['nullable', 'string', Rule::in(['standard', 'express', 'pickup'])],
-            'payment_method'           => ['nullable', 'string', Rule::in(['cod', 'online', 'card', 'bkash', 'nagad', 'sslcommerz'])],
+            'payment_method'           => ['nullable', 'string', Rule::in($this->allowedPaymentMethods())],
             'address_id'               => ['nullable', 'integer'],
             'expected_total_amount'    => ['nullable', 'integer', 'min:0'],
             'ttl_seconds'              => ['nullable', 'integer', 'min:1', 'max:3600'],
@@ -163,7 +163,7 @@ class StoreCheckoutQuoteController extends Controller
             'promo_code'                   => ['nullable', 'string', 'max:64'],
             'coupon_code'                  => ['nullable', 'string', 'max:64'],
             'shipping_method'              => ['nullable', 'string', Rule::in(['standard', 'express', 'pickup'])],
-            'payment_method'               => ['required', 'string', Rule::in(['cod', 'online', 'card', 'bkash', 'nagad', 'sslcommerz'])],
+            'payment_method'               => ['required', 'string', Rule::in($this->allowedPaymentMethods())],
             'address_id'                   => ['nullable', 'integer'],
             'expected_total_amount'        => ['nullable', 'integer', 'min:0'],
             'notes'                        => ['nullable', 'string', 'max:500'],
@@ -232,9 +232,40 @@ class StoreCheckoutQuoteController extends Controller
             ->where('order_number', $orderNumber)
             ->firstOrFail();
 
+        // An order number alone must never expose address/phone PII. Respond 404 (not 403)
+        // so that existence of other customers' orders is not revealed.
+        $userId = $this->resolveUserId($request);
+        if ($order->user_id !== null) {
+            abort_unless($userId !== null && (int) $order->user_id === $userId, 404);
+        } else {
+            $guestToken = $this->resolveGuestToken($request);
+            abort_unless(
+                $guestToken !== null
+                && $order->guest_token !== null
+                && hash_equals((string) $order->guest_token, $guestToken),
+                404
+            );
+        }
+
         return response()->json([
             'data' => $this->checkoutService->formatOrder($order),
         ]);
+    }
+
+    /**
+     * The mock method is accepted only where the mock gateway is permitted (never in production).
+     *
+     * @return list<string>
+     */
+    private function allowedPaymentMethods(): array
+    {
+        $methods = ['cod', 'online', 'card', 'bkash', 'nagad', 'sslcommerz'];
+
+        if (!app()->environment('production') && (bool) config('payment.allow_mock_gateway', false)) {
+            $methods[] = 'mock';
+        }
+
+        return $methods;
     }
 
     private function resolveIdempotencyKey(Request $request, array $validated): string
