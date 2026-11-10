@@ -100,13 +100,13 @@ The backend is built around a **Modular Monolith** pattern inside `apps/api/app/
 | :--- | :---: | :--- | :--- |
 | **Identity** | ✅ Complete | Users, Roles, Permissions, Addresses, Audit Logs, Staff Authentication | `/api/auth/*`<br>`/api/admin/auth/*` |
 | **Catalog** | ✅ Complete | Brands, Categories, Attributes, AttributeValues, Products, Variants, Images, Bulk Import, Search & Filtering | `/api/catalog/*`<br>`/api/admin/catalog/*` |
-| **Inventory** | ⏳ Next Up | Stock balances, warehouse locations, stock reservations, ledger movements | `/api/admin/inventory/*` |
-| **Cart** | 📋 Planned | Guest & authenticated shopping cart, line item calculations | `/api/cart/*` |
-| **Checkout** | 📋 Planned | Two-stage checkout orchestration, pricing engine, lock acquisition | `/api/checkout/*` |
-| **Orders** | 📋 Planned | Order state machine, item snapshots, status history, cancellations | `/api/orders/*`<br>`/api/admin/orders/*` |
-| **Payments** | 📋 Planned | Gateway adapters (bKash, Nagad, COD), payment verification, webhooks | `/api/payments/*`<br>`/api/webhooks/*` |
-| **Promotions** | 📋 Planned | Coupons, percentage/fixed discounts, usage quotas, anti-abuse rules | `/api/admin/promotions/*` |
-| **Shipping** | 📋 Planned | Courier integration (Pathao, Steadfast, REDX), consignment creation | `/api/shipping/*`<br>`/api/admin/shipments/*` |
+| **Inventory** | ✅ Complete | Warehouses, variant stock balances, reservations with expiry, movement ledger, low-stock alerts, reporting | `/api/inventory/*`<br>`/api/admin/inventory/*` |
+| **Cart** | ✅ Complete | Guest & customer carts, merging, address & coupon selection | `/api/cart/*` |
+| **Checkout** | ✅ Complete | Backend-authoritative quotes, stock revalidation under row locks, idempotent order placement | `/api/checkout/*` |
+| **Orders** | ✅ Complete | Unique order numbers, item snapshots, status history, cancellation, customer history, admin lifecycle | `/api/orders/*`<br>`/api/admin/orders/*` |
+| **Payments** | ✅ Complete | `PaymentGateway` interface; bKash, Nagad, SSLCommerz, COD adapters; server-side verification; idempotent webhooks; refunds; redacted audit logs | `/api/payments/*`<br>`/api/webhooks/*` |
+| **Promotions** | 🟡 Partial | Coupon validation & discount calculation used by checkout (admin management planned) | `/api/checkout/validate-coupon` |
+| **Shipping** | 🟡 Partial | Bangladesh shipping-rate calculation (courier integration planned) | `/api/checkout/shipping-rates` |
 | **Customers** | 📋 Planned | Customer profiles, saved addresses, wishlists | `/api/customers/*` |
 | **Reviews** | 📋 Planned | Verified buyer reviews, star ratings, moderation workflows | `/api/reviews/*` |
 | **Notifications** | 📋 Planned | Asynchronous transactional emails, SMS alerts, in-app notifications | Internal Queue |
@@ -137,6 +137,15 @@ The backend is built around a **Modular Monolith** pattern inside `apps/api/app/
   - **Storage Abstraction**: Product image uploads utilize Laravel's `Storage` facade (`disk` + `path`). Images are never tied to hardcoded local file paths.
   - **Category Tree Integrity**: Circular parenting prevention (a category cannot be its own parent) and orphan protection on category deletion (children safely set `parent_id = null`).
   - **Bulk Import Foundation**: Extensible CSV/JSON product and variant importer (`ImportService`) executed within database transactions.
+
+### 3. Orders & Payments Modules (`app/Modules/Orders`, `app/Modules/Payments`)
+- **Separated statuses**: `status` (order), `payment_status` and `fulfilment_status` change independently; every change writes an immutable `order_status_histories` row.
+- **Inventory via contract only**: cancel releases the stock reservation, ship commits it — always through `InventoryServiceContract`.
+- **Gateways**: `BkashGatewayAdapter` (Tokenized Checkout v1.2.0-beta), `NagadGatewayAdapter` (v-0.2.0), `SslCommerzGatewayAdapter` (v4), `CodGatewayAdapter`, plus `MockPaymentGatewayAdapter` for tests, which refuses to run in production.
+- **Payment safety**: server-side verification with exact amount (paisa), currency, merchant-reference and merchant-id matching; idempotency keys on initiation and refunds; webhook dedupe on `(gateway, gateway_event_id)`; HMAC webhook signatures; no DB locks held during gateway HTTP calls.
+- **Delayed callbacks**: a payment verified after cancellation is recorded as `paid` and flagged `requires_manual_refund` without re-opening the order.
+- **Redaction**: all gateway traffic is stored through `SensitiveDataRedactor`; credentials are env-only.
+- Full contract: [docs/api/orders_and_payments_api.md](./docs/api/orders_and_payments_api.md).
 
 ---
 
@@ -276,6 +285,9 @@ php artisan test
 # Run Catalog module feature tests specifically
 php artisan test --filter=Catalog
 
+# Run Orders & Payments unit + feature tests
+php artisan test --filter=OrdersAndPayments
+
 # Verify queue job dispatch and execution
 php artisan test:dispatch-job
 php artisan queue:work --once
@@ -383,6 +395,7 @@ The GitHub Actions pipeline at `.github/workflows/ci.yml` validates every pull r
 | [docs/architecture/frontend_architecture.md](./docs/architecture/frontend_architecture.md) | Next.js 16 App Router layout, state management, and RSC design |
 | [docs/database/database-design.md](./docs/database/database-design.md) | Relational database schema, ERD, and indexing strategies |
 | [docs/api/api_conventions.md](./docs/api/api_conventions.md) | REST API design conventions, status codes, and error payloads |
+| [docs/api/orders_and_payments_api.md](./docs/api/orders_and_payments_api.md) | Orders & Payments endpoints, status model, verification guarantees, gateway adapters |
 | [docs/security/security-architecture.md](./docs/security/security-architecture.md) | Security framework, threat model, and defense-in-depth policies |
 | [docs/deployment/deployment-guide.md](./docs/deployment/deployment-guide.md) | Production deployment, container setup, and rollback instructions |
 | [docs/adr/](./docs/adr/) | Architectural Decision Records |
@@ -396,10 +409,10 @@ The GitHub Actions pipeline at `.github/workflows/ci.yml` validates every pull r
 | **01** | Foundation | Monorepo setup, Docker environments, Next.js 16, Laravel 13, CI | ✅ Complete |
 | **02** | Identity & Auth | Sanctum auth, Spatie RBAC, user profiles, address book, audit logs | ✅ Complete |
 | **03** | Catalog Management | Brands, categories, attributes, products, variants, images, search/filtering, bulk import | ✅ Complete |
-| **04** | Inventory Management | Stock balances, warehouse locations, stock reservations, ledger movements | ⏳ Next Up |
-| **05** | Storefront Portal | Customer catalog browsing, category tree, faceted filters, product details, SEO | 🔲 Planned |
-| **06** | Cart & Checkout | Session & persistent cart, two-stage checkout, pricing engine, lock acquisition | 🔲 Planned |
-| **07** | Orders & Payments | Order lifecycle state machine, bKash / Nagad / COD payment flows, webhooks | 🔲 Planned |
+| **04** | Inventory Management | Stock balances, warehouse locations, stock reservations, ledger movements | ✅ Complete |
+| **05** | Storefront Portal | Customer catalog browsing, category tree, faceted filters, product details, SEO | ✅ Complete |
+| **06** | Cart & Checkout | Session & persistent cart, two-stage checkout, pricing engine, lock acquisition | ✅ Complete |
+| **07** | Orders & Payments | Order lifecycle state machine, bKash / Nagad / SSLCommerz / COD payment flows, webhooks | ✅ Complete |
 | **08** | Admin Operations | Backoffice catalog management, inventory adjustments, order fulfillment | 🔲 Planned |
 | **09** | Courier Integration | Pathao, Steadfast, REDX automated consignments, tracking, COD reconciliation | 🔲 Planned |
 | **10** | Promotions & Reviews | Coupon validation engine, customer reviews, ratings moderation, wishlists | 🔲 Planned |

@@ -7,6 +7,13 @@ import {
   buildProductJsonLd,
 } from '@/lib/utils/format';
 import { apiRequest } from '@/lib/api/client';
+import {
+  fetchCustomerOrders,
+  initiatePayment,
+  isCancellableByCustomer,
+  isOnlinePaymentMethod,
+  normalizeOrder,
+} from '@/features/orders/api/ordersApi';
 import { ProductCard } from '@/features/catalog/components/ProductCard';
 import { ProductImageGallery } from '@/features/catalog/components/ProductImageGallery';
 import { ProductVariantSelector } from '@/features/catalog/components/ProductVariantSelector';
@@ -300,6 +307,154 @@ export async function runStorefrontTestSuite(): Promise<{ passed: number; names:
     }
 
     names.push('API client public tag caching vs private no-store customer data isolation');
+  }
+
+  // 8. Orders & payments integration with the Laravel contract
+  {
+    const baseOrder: Order = {
+      id: 'ord-9',
+      orderNumber: 'ORD-20261109-ABC123',
+      customerId: '7',
+      status: 'confirmed',
+      items: [
+        {
+          id: 'oi-9',
+          orderId: 'ord-9',
+          variantId: '501',
+          sku: 'TEE-BLK-M',
+          productName: 'Heavyweight Boxy Tee',
+          size: 'M',
+          color: 'Black',
+          quantity: 1,
+          unitPrice: { amount: 185000, currency: 'BDT', formatted: '৳1,850.00' },
+          totalPrice: { amount: 185000, currency: 'BDT', formatted: '৳1,850.00' },
+        },
+      ],
+      shippingAddress: {
+        fullName: 'Nadia Karim',
+        addressLine1: 'House 22, Road 7',
+        city: 'Dhaka',
+        state: 'Dhaka',
+        postalCode: '1212',
+        country: 'BD',
+        phone: '01711000000',
+      },
+      total: { amount: 185000, currency: 'BDT', formatted: '৳1,850.00' },
+      createdAt: '2026-11-09T10:00:00Z',
+      updatedAt: '2026-11-09T10:00:00Z',
+    };
+
+    // The API upper-cases `status`; the client must normalise it.
+    const normalized = normalizeOrder({ ...baseOrder, status: 'CONFIRMED' as unknown as Order['status'] });
+    assertCondition(normalized.status === 'confirmed', 'normalizeOrder must lower-case API status');
+
+    assertCondition(
+      isCancellableByCustomer({ status: 'pending_payment' }) &&
+        isCancellableByCustomer({ status: 'confirmed' }) &&
+        !isCancellableByCustomer({ status: 'processing' }) &&
+        !isCancellableByCustomer({ status: 'shipped' }) &&
+        !isCancellableByCustomer({ status: 'cancelled' }),
+      'Customer cancellation must mirror backend cancellable statuses'
+    );
+
+    const confirmedHtml = renderToStaticMarkup(
+      <OrderHistoryView
+        initialOrders={[{ ...baseOrder, payment_status: 'cod_pending' }]}
+      />
+    );
+    assertCondition(
+      confirmedHtml.includes('CONFIRMED') && confirmedHtml.includes('PAYMENT: COD PENDING'),
+      'Order history must show separate order and payment status badges'
+    );
+    assertCondition(
+      confirmedHtml.includes('Cancel order'),
+      'A confirmed order must offer a cancel action'
+    );
+
+    const shippedHtml = renderToStaticMarkup(
+      <OrderHistoryView initialOrders={[{ ...baseOrder, status: 'shipped' }]} />
+    );
+    assertCondition(
+      !shippedHtml.includes('Cancel order'),
+      'A shipped order must not offer a cancel action'
+    );
+
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const originalFetch = globalThis.fetch;
+    let mode: 'orders-500' | 'orders-ok' | 'pay' = 'orders-500';
+
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init: init ?? {} });
+      const json = (body: unknown, status: number) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        });
+
+      if (mode === 'orders-500') return json({ message: 'Server exploded' }, 500);
+      if (mode === 'orders-ok') {
+        return json({ data: [{ ...baseOrder, status: 'CONFIRMED' }] }, 200);
+      }
+      return json(
+        {
+          data: {
+            transaction: { status: 'pending', merchant_reference: 'TXN-ORD-1-AB12' },
+            redirect_url: 'https://sandbox.payment.bkash.com/redirect/TR001',
+          },
+          idempotent_replay: false,
+        },
+        201
+      );
+    }) as typeof fetch;
+
+    try {
+      // Errors must surface, not turn into a misleading "No orders placed yet".
+      let surfaced = false;
+      try {
+        await fetchCustomerOrders();
+      } catch (err) {
+        surfaced = err instanceof Error && err.message.includes('Server exploded');
+      }
+      assertCondition(surfaced, 'fetchCustomerOrders must throw API failures instead of returning []');
+
+      mode = 'orders-ok';
+      const orders = await fetchCustomerOrders();
+      assertCondition(
+        orders[0]?.status === 'confirmed' &&
+          calls[calls.length - 1]?.url.endsWith('/orders') &&
+          calls[calls.length - 1]?.init.cache === 'no-store',
+        'Order history must call /orders uncached and normalise status'
+      );
+
+      mode = 'pay';
+      const payment = await initiatePayment('ORD-20261109-ABC123', 'bkash', 'pay-key-1');
+      const payCall = calls[calls.length - 1];
+      const payBody = String(payCall?.init.body ?? '');
+      const payHeaders = (payCall?.init.headers ?? {}) as Record<string, string>;
+      assertCondition(
+        payment.redirectUrl === 'https://sandbox.payment.bkash.com/redirect/TR001' &&
+          payCall?.url.endsWith('/payments/initiate') &&
+          payCall?.init.cache === 'no-store',
+        'initiatePayment must hit /payments/initiate uncached and return the redirect URL'
+      );
+      assertCondition(
+        payHeaders['Idempotency-Key'] === 'pay-key-1',
+        'initiatePayment must send an Idempotency-Key header'
+      );
+      assertCondition(
+        !/amount|price|total/i.test(payBody) && payBody.includes('ORD-20261109-ABC123'),
+        'initiatePayment must never send a price from the browser'
+      );
+      assertCondition(
+        isOnlinePaymentMethod('bkash') && isOnlinePaymentMethod('nagad') &&
+          isOnlinePaymentMethod('sslcommerz') && !isOnlinePaymentMethod('cod'),
+        'Only gateway methods are treated as online payments'
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    names.push('Orders & payments contract: status normalisation, cancel rules, surfaced errors, no client prices');
   }
 
   return { passed: names.length, names };

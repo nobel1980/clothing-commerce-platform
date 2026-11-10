@@ -273,6 +273,7 @@ Route::prefix('checkout')->name('checkout.')->group(function () {
     Route::post('orders', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'placeOrder'])
         ->name('orders.store');
     Route::get('orders/{orderNumber}', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'showOrder'])
+        ->middleware('throttle:60,1')
         ->name('orders.show');
 });
 
@@ -334,3 +335,95 @@ Route::prefix('admin/inventory')
                 ->name('movements');
         });
     });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Orders — Customer Order History, Details & Cancellation
+// ─────────────────────────────────────────────────────────────────────────────
+Route::prefix('orders')->name('orders.')->middleware('auth:sanctum')->group(function () {
+    Route::get('/', [\App\Modules\Orders\Controllers\CustomerOrderController::class, 'index'])
+        ->name('index');
+    Route::get('{orderNumber}', [\App\Modules\Orders\Controllers\CustomerOrderController::class, 'show'])
+        ->name('show');
+    Route::post('{orderNumber}/cancel', [\App\Modules\Orders\Controllers\CustomerOrderController::class, 'cancel'])
+        ->name('cancel');
+    Route::get('{orderNumber}/tracking', [\App\Modules\Shipping\Controllers\CustomerTrackingController::class, 'trackOrder'])
+        ->name('tracking');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Orders — Admin Order Management & Fulfilment Lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
+Route::prefix('admin/orders')
+    ->name('admin.orders.')
+    ->middleware(['auth:sanctum', 'staff'])
+    ->group(function () {
+        Route::get('/', [\App\Modules\Orders\Controllers\AdminOrderController::class, 'index'])
+            ->name('index');
+        Route::get('{order}', [\App\Modules\Orders\Controllers\AdminOrderController::class, 'show'])
+            ->name('show');
+        Route::post('{order}/confirm', [\App\Modules\Orders\Controllers\AdminOrderController::class, 'confirm'])
+            ->name('confirm');
+        Route::post('{order}/process', [\App\Modules\Orders\Controllers\AdminOrderController::class, 'process'])
+            ->name('process');
+        Route::post('{order}/ship', [\App\Modules\Orders\Controllers\AdminOrderController::class, 'ship'])
+            ->name('ship');
+        Route::post('{order}/deliver', [\App\Modules\Orders\Controllers\AdminOrderController::class, 'deliver'])
+            ->name('deliver');
+        Route::post('{order}/cancel', [\App\Modules\Orders\Controllers\AdminOrderController::class, 'cancel'])
+            ->name('cancel');
+        Route::post('{order}/refund', [\App\Modules\Orders\Controllers\AdminOrderController::class, 'refund'])
+            ->name('refund');
+    });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payments — Initiation, Server-Side Verification, Callbacks & Webhooks
+// ─────────────────────────────────────────────────────────────────────────────
+Route::prefix('payments')->name('payments.')->group(function () {
+    Route::post('initiate', [\App\Modules\Payments\Controllers\PaymentController::class, 'initiate'])
+        ->middleware('throttle:20,1')
+        ->name('initiate');
+    Route::post('verify', [\App\Modules\Payments\Controllers\PaymentController::class, 'verify'])
+        ->middleware('throttle:30,1')
+        ->name('verify');
+    Route::match(['get', 'post'], 'callback/{gateway}', [\App\Modules\Payments\Controllers\PaymentController::class, 'callback'])
+        ->middleware('throttle:60,1')
+        ->name('callback');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shipping — Admin Consignment Management, Tracking & COD Reconciliation
+// ─────────────────────────────────────────────────────────────────────────────
+Route::prefix('admin/shipments')
+    ->name('admin.shipments.')
+    ->middleware(['auth:sanctum', 'staff'])
+    ->group(function () {
+        Route::get('/', [\App\Modules\Shipping\Controllers\AdminShipmentController::class, 'index'])
+            ->name('index');
+        Route::post('/', [\App\Modules\Shipping\Controllers\AdminShipmentController::class, 'store'])
+            ->name('store');
+        Route::post('calculate-charge', [\App\Modules\Shipping\Controllers\AdminShipmentController::class, 'calculateCharge'])
+            ->name('calculate-charge');
+        Route::get('cod-reconciliation', [\App\Modules\Shipping\Controllers\AdminShipmentController::class, 'codReconciliationReport'])
+            ->name('cod-reconciliation.report');
+        Route::post('cod-reconciliation', [\App\Modules\Shipping\Controllers\AdminShipmentController::class, 'reconcileCod'])
+            ->name('cod-reconciliation.store');
+        Route::get('{shipment}', [\App\Modules\Shipping\Controllers\AdminShipmentController::class, 'show'])
+            ->name('show');
+        Route::post('{shipment}/cancel', [\App\Modules\Shipping\Controllers\AdminShipmentController::class, 'cancel'])
+            ->name('cancel');
+        Route::post('{shipment}/track', [\App\Modules\Shipping\Controllers\AdminShipmentController::class, 'track'])
+            ->name('track');
+    });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payments & Courier Webhooks
+// ─────────────────────────────────────────────────────────────────────────────
+Route::post('webhooks/shipping/{courier}', [\App\Modules\Shipping\Controllers\CustomerTrackingController::class, 'webhook'])
+    ->middleware('throttle:300,1')
+    ->name('webhooks.shipping');
+
+// Gateways call this from a small set of IPs and may retry in bursts, so the limit is generous.
+Route::post('webhooks/{gateway}', [\App\Modules\Payments\Controllers\PaymentController::class, 'webhook'])
+    ->middleware('throttle:300,1')
+    ->name('webhooks.payment');
+

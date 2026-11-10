@@ -5,6 +5,8 @@ namespace App\Modules\Orders\Models;
 use App\Modules\Cart\Models\Cart;
 use App\Modules\Checkout\Models\CheckoutQuote;
 use App\Modules\Identity\Models\User;
+use App\Modules\Payments\Models\PaymentRefund;
+use App\Modules\Payments\Models\PaymentTransaction;
 use App\Modules\Promotions\Models\Coupon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,6 +25,7 @@ class Order extends Model
         'status',
         'payment_method',
         'payment_status',
+        'fulfilment_status',
         'currency',
         'subtotal_amount',
         'discount_amount',
@@ -38,6 +41,11 @@ class Order extends Model
         'payment_preparation_data',
         'notes',
         'placed_at',
+        'confirmed_at',
+        'shipped_at',
+        'delivered_at',
+        'cancelled_at',
+        'cancellation_reason',
     ];
 
     protected function casts(): array
@@ -58,12 +66,31 @@ class Order extends Model
             'billing_address_snapshot'  => 'array',
             'payment_preparation_data'  => 'array',
             'placed_at'                 => 'datetime',
+            'confirmed_at'              => 'datetime',
+            'shipped_at'                => 'datetime',
+            'delivered_at'              => 'datetime',
+            'cancelled_at'              => 'datetime',
         ];
     }
 
     public function items(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    public function statusHistories(): HasMany
+    {
+        return $this->hasMany(OrderStatusHistory::class)->orderBy('id');
+    }
+
+    public function paymentTransactions(): HasMany
+    {
+        return $this->hasMany(PaymentTransaction::class)->orderByDesc('id');
+    }
+
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(PaymentRefund::class)->orderByDesc('id');
     }
 
     public function user(): BelongsTo

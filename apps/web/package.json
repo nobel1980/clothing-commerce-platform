@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node scripts/run-tests.cjs"
   },
   "dependencies": {
     "@clothing-commerce/types": "workspace:*",

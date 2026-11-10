@@ -70,15 +70,38 @@ export interface Cart {
   total: Money;
 }
 
+/**
+ * Order lifecycle status. Mirrors the Laravel `orders.status` column (lower-case);
+ * the API returns it upper-cased, so clients must normalise before comparing.
+ * Payment state is tracked separately in `PaymentStatus`.
+ * `payment_processing`, `paid` and `refunded` are retained for backwards compatibility.
+ */
 export type OrderStatus =
   | 'pending'
-  | 'payment_processing'
-  | 'paid'
+  | 'pending_payment'
+  | 'pending_confirmation'
+  | 'awaiting_payment'
+  | 'payment_failed'
+  | 'confirmed'
   | 'processing'
   | 'shipped'
   | 'delivered'
   | 'cancelled'
+  | 'returned'
+  | 'payment_processing'
+  | 'paid'
   | 'refunded';
+
+export type PaymentStatus =
+  | 'pending'
+  | 'cod_pending'
+  | 'awaiting_payment'
+  | 'paid'
+  | 'failed'
+  | 'partially_refunded'
+  | 'refunded';
+
+export type PaymentGatewayId = 'cod' | 'bkash' | 'nagad' | 'sslcommerz';
 
 export interface OrderItem {
   id: string;
@@ -112,6 +135,9 @@ export interface Order {
   orderNumber: string;
   customerId: string;
   status: OrderStatus;
+  /** Separate from `status`; absent on legacy payloads. */
+  payment_status?: PaymentStatus;
+  payment_method?: string;
   items: OrderItem[];
   shippingAddress: ShippingAddress;
   total: Money;

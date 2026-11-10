@@ -9,6 +9,8 @@ use App\Modules\Checkout\Models\CheckoutQuote;
 use App\Modules\Identity\Models\Address;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\OrderItem;
+use App\Modules\Orders\Models\OrderStatusHistory;
+use App\Modules\Payments\Models\PaymentTransaction;
 use App\Modules\Promotions\Models\Coupon;
 use App\Modules\Promotions\Services\CouponService;
 use App\Modules\Shipping\Services\ShippingCalculationService;
@@ -618,6 +620,7 @@ class CheckoutService
                     'status'                    => $orderStatus,
                     'payment_method'            => $paymentMethod,
                     'payment_status'            => $paymentStatus,
+                    'fulfilment_status'         => 'unfulfilled',
                     'currency'                  => $currency,
                     'subtotal_amount'           => $subtotal->amount,
                     'discount_amount'           => $discount->amount,
@@ -635,11 +638,44 @@ class CheckoutService
                     'payment_preparation_data'  => $paymentPreparationData,
                     'notes'                     => $input['notes'] ?? $shippingAddressSnapshot['delivery_instructions'] ?? null,
                     'placed_at'                 => now(),
+                    'confirmed_at'              => $isCod ? now() : null,
                 ]);
 
                 foreach ($orderItemsPayloads as $itemPayload) {
                     $itemPayload['order_id'] = $createdOrder->id;
                     OrderItem::query()->create($itemPayload);
+                }
+
+                // Record initial OrderStatusHistory entry
+                OrderStatusHistory::query()->create([
+                    'order_id'               => $createdOrder->id,
+                    'from_status'            => null,
+                    'to_status'              => $orderStatus,
+                    'from_payment_status'    => null,
+                    'to_payment_status'      => $paymentStatus,
+                    'from_fulfilment_status' => null,
+                    'to_fulfilment_status'   => 'unfulfilled',
+                    'actor_type'             => $userId !== null ? 'customer' : 'system',
+                    'actor_id'               => $userId,
+                    'reason'                 => 'Order placed',
+                    'created_at'             => now(),
+                ]);
+
+                // Record initial COD PaymentTransaction if COD
+                if ($isCod) {
+                    PaymentTransaction::query()->create([
+                        'order_id'                => $createdOrder->id,
+                        'idempotency_key'         => 'cod-init-' . $normalizedKey,
+                        'merchant_reference'      => 'TXN-' . $orderNumber,
+                        'gateway'                 => 'cod',
+                        'gateway_payment_id'      => 'COD-' . $orderNumber,
+                        'amount'                  => $total->amount,
+                        'refunded_amount'         => 0,
+                        'currency'                => $currency,
+                        'status'                  => 'cod_pending',
+                        'raw_initiation_request'  => ['order_number' => $orderNumber, 'amount' => $total->amount],
+                        'raw_initiation_response' => ['status' => 'cod_pending'],
+                    ]);
                 }
 
                 // 11. Record coupon redemption if applicable
