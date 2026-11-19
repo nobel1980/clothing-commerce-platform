@@ -11,11 +11,20 @@ class ProductVariantResource extends JsonResource
     {
         return [
             'id'               => $this->id,
+            'product_id'       => $this->product_id,
+            'product'          => $this->whenLoaded('product', fn () => [
+                'id'     => $this->product->id,
+                'name'   => $this->product->name,
+                'slug'   => $this->product->slug,
+                'status' => $this->product->status,
+            ]),
             'sku'              => $this->sku,
             'color'            => $this->color,
             'size'             => $this->size,
             // Prices returned in major units for frontend convenience;
             // raw integer sub-units also exposed for precision
+            'price_amount'     => (int) $this->price_amount,
+            'cost_price'       => $this->cost_price !== null ? (int) $this->cost_price : null,
             'price'            => [
                 'amount'   => $this->price_amount,          // integer paisa/cents
                 'currency' => $this->currency,

@@ -180,6 +180,11 @@ Route::prefix('catalog')->name('catalog.')->group(function () {
         ->name('products.index');
     Route::get('products/{product:slug}', [\App\Modules\Catalog\Controllers\Store\StoreProductController::class, 'show'])
         ->name('products.show');
+    Route::get('products/{product:slug}/reviews', [\App\Modules\Reviews\Controllers\StoreReviewController::class, 'index'])
+        ->name('products.reviews.index');
+    Route::post('products/{product:slug}/reviews', [\App\Modules\Reviews\Controllers\StoreReviewController::class, 'store'])
+        ->middleware('throttle:15,1')
+        ->name('products.reviews.store');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -187,8 +192,14 @@ Route::prefix('catalog')->name('catalog.')->group(function () {
 // ─────────────────────────────────────────────────────────────────────────────
 Route::prefix('admin/catalog')
     ->name('admin.catalog.')
-    ->middleware(['auth:sanctum'])
+    ->middleware(['auth:sanctum', 'staff'])
     ->group(function () {
+        // Brands & Global Variants
+        Route::get('brands', [\App\Modules\Catalog\Controllers\Admin\AdminProductController::class, 'listBrands'])
+            ->name('brands.index');
+        Route::get('variants', [\App\Modules\Catalog\Controllers\Admin\AdminProductController::class, 'listVariants'])
+            ->name('variants.index');
+
         // Categories
         Route::get('categories/tree', [\App\Modules\Catalog\Controllers\Admin\AdminCategoryController::class, 'tree'])
             ->name('categories.tree');
@@ -413,6 +424,95 @@ Route::prefix('admin/shipments')
             ->name('cancel');
         Route::post('{shipment}/track', [\App\Modules\Shipping\Controllers\AdminShipmentController::class, 'track'])
             ->name('track');
+    });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Centralized Admin Dashboard — Metrics, Payments, Customers, Promotions,
+// Reviews, Reports, Settings & CSV Exports (All protected by staff + permissions)
+// ─────────────────────────────────────────────────────────────────────────────
+Route::prefix('admin')
+    ->name('admin.')
+    ->middleware(['auth:sanctum', 'staff'])
+    ->group(function () {
+        // Dashboard Overview Metrics
+        Route::get('dashboard/metrics', [\App\Modules\Reporting\Controllers\AdminDashboardController::class, 'metrics'])
+            ->name('dashboard.metrics');
+
+        // Payments Management
+        Route::prefix('payments')->name('payments.')->group(function () {
+            Route::get('/', [\App\Modules\Payments\Controllers\AdminPaymentController::class, 'index'])
+                ->name('index');
+            Route::get('refunds', [\App\Modules\Payments\Controllers\AdminPaymentController::class, 'refunds'])
+                ->name('refunds');
+            Route::get('logs', [\App\Modules\Payments\Controllers\AdminPaymentController::class, 'logs'])
+                ->name('logs');
+            Route::get('{transaction}', [\App\Modules\Payments\Controllers\AdminPaymentController::class, 'show'])
+                ->name('show');
+            Route::post('{transaction}/refund', [\App\Modules\Payments\Controllers\AdminPaymentController::class, 'refund'])
+                ->name('refund');
+        });
+
+        // Customers Management
+        Route::prefix('customers')->name('customers.')->group(function () {
+            Route::get('/', [\App\Modules\Customers\Controllers\AdminCustomerController::class, 'index'])
+                ->name('index');
+            Route::get('{customer}', [\App\Modules\Customers\Controllers\AdminCustomerController::class, 'show'])
+                ->name('show');
+            Route::put('{customer}', [\App\Modules\Customers\Controllers\AdminCustomerController::class, 'update'])
+                ->name('update');
+            Route::post('{customer}/status', [\App\Modules\Customers\Controllers\AdminCustomerController::class, 'toggleStatus'])
+                ->name('status');
+        });
+
+        // Promotions / Coupons Management
+        Route::prefix('promotions/coupons')->name('promotions.coupons.')->group(function () {
+            Route::get('/', [\App\Modules\Promotions\Controllers\AdminCouponController::class, 'index'])
+                ->name('index');
+            Route::post('/', [\App\Modules\Promotions\Controllers\AdminCouponController::class, 'store'])
+                ->name('store');
+            Route::get('{coupon}', [\App\Modules\Promotions\Controllers\AdminCouponController::class, 'show'])
+                ->name('show');
+            Route::put('{coupon}', [\App\Modules\Promotions\Controllers\AdminCouponController::class, 'update'])
+                ->name('update');
+            Route::post('{coupon}/toggle', [\App\Modules\Promotions\Controllers\AdminCouponController::class, 'toggle'])
+                ->name('toggle');
+            Route::delete('{coupon}', [\App\Modules\Promotions\Controllers\AdminCouponController::class, 'destroy'])
+                ->name('destroy');
+        });
+
+        // Reviews Moderation
+        Route::prefix('reviews')->name('reviews.')->group(function () {
+            Route::get('/', [\App\Modules\Reviews\Controllers\AdminReviewController::class, 'index'])
+                ->name('index');
+            Route::get('{review}', [\App\Modules\Reviews\Controllers\AdminReviewController::class, 'show'])
+                ->name('show');
+            Route::post('{review}/moderate', [\App\Modules\Reviews\Controllers\AdminReviewController::class, 'moderate'])
+                ->name('moderate');
+            Route::delete('{review}', [\App\Modules\Reviews\Controllers\AdminReviewController::class, 'destroy'])
+                ->name('destroy');
+        });
+
+        // Analytics & Reports
+        Route::prefix('reports')->name('reports.')->group(function () {
+            Route::get('overview', [\App\Modules\Reporting\Controllers\AdminReportController::class, 'overview'])
+                ->name('overview');
+            Route::get('sales', [\App\Modules\Reporting\Controllers\AdminReportController::class, 'sales'])
+                ->name('sales');
+            Route::get('best-sellers', [\App\Modules\Reporting\Controllers\AdminReportController::class, 'bestSellers'])
+                ->name('best-sellers');
+            Route::get('low-stock', [\App\Modules\Reporting\Controllers\AdminReportController::class, 'lowStock'])
+                ->name('low-stock');
+        });
+
+        // Platform Settings
+        Route::get('settings', [\App\Modules\Identity\Controllers\Admin\AdminSettingController::class, 'index'])
+            ->name('settings.index');
+        Route::put('settings', [\App\Modules\Identity\Controllers\Admin\AdminSettingController::class, 'update'])
+            ->name('settings.update');
+
+        // CSV Export
+        Route::get('export/{resource}', [\App\Modules\Reporting\Controllers\AdminExportController::class, 'export'])
+            ->name('export');
     });
 
 // ─────────────────────────────────────────────────────────────────────────────

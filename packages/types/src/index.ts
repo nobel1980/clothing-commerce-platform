@@ -310,9 +310,18 @@ export interface VariantPrice {
 
 export interface CatalogVariant {
   id: number;
+  product_id?: number;
+  product?: {
+    id: number;
+    name: string;
+    slug: string;
+    status: ProductStatus;
+  } | null;
   sku: string;
   color: string | null;
   size: string | null;
+  price_amount?: number;
+  cost_price?: number | null;
   price: VariantPrice;
   compare_at_price?: VariantPrice | null;
   status: string;
@@ -447,5 +456,345 @@ export interface CustomerProfile {
   email_verified_at?: string | null;
   created_at?: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Centralized Admin Dashboard Contracts
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type AdminPermission =
+  | 'users.view'
+  | 'users.manage'
+  | 'roles.view'
+  | 'roles.manage'
+  | 'audit.view'
+  | 'catalog.view'
+  | 'catalog.manage'
+  | 'inventory.view'
+  | 'inventory.manage'
+  | 'orders.view'
+  | 'orders.manage'
+  | 'customers.view'
+  | 'customers.manage'
+  | 'payments.view'
+  | 'payments.manage'
+  | 'shipping.view'
+  | 'shipping.manage'
+  | 'promotions.view'
+  | 'promotions.manage'
+  | 'reviews.view'
+  | 'reviews.manage'
+  | 'reports.view'
+  | 'settings.view'
+  | 'settings.manage';
+
+export interface AdminStaffUser {
+  id: number;
+  name: string;
+  email: string;
+  phone?: string | null;
+  role: string;
+  status: 'active' | 'suspended' | 'inactive';
+  roles?: string[];
+  permissions?: string[];
+  email_verified_at?: string | null;
+  last_login_at?: string | null;
+  created_at?: string;
+}
+
+export interface AdminRoleRecord {
+  id: number;
+  name: string;
+  guard_name?: string;
+  permissions: Array<{ id: number; name: string } | string>;
+  users_count?: number;
+  created_at?: string;
+}
+
+export interface AdminAuditLogRecord {
+  id: number;
+  user_id?: number | null;
+  user_email?: string | null;
+  action: string;
+  auditable_type?: string | null;
+  auditable_id?: number | string | null;
+  old_values?: Record<string, unknown> | null;
+  new_values?: Record<string, unknown> | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  created_at: string;
+}
+
+export interface AdminLowStockProduct {
+  inventory_item_id: number;
+  product_id?: number | null;
+  product_name: string;
+  product_slug?: string | null;
+  product_variant_id: number;
+  sku: string;
+  color?: string | null;
+  size?: string | null;
+  warehouse_id: number;
+  warehouse_name: string;
+  warehouse_code: string;
+  quantity_on_hand: number;
+  quantity_reserved: number;
+  available_quantity: number;
+  low_stock_threshold: number;
+  is_out_of_stock: boolean;
+}
+
+export interface AdminBestSellingProduct {
+  product_id?: number | null;
+  product_name: string;
+  sku: string;
+  total_quantity_sold: number;
+  total_revenue: number;
+  orders_count: number;
+  currency: string;
+}
+
+export interface AdminRecentOrderSummary {
+  id: number;
+  order_number: string;
+  customer_name: string;
+  status: string;
+  payment_status: string;
+  fulfilment_status: string;
+  payment_method: string;
+  total_amount: number;
+  currency: string;
+  placed_at?: string | null;
+}
+
+export interface AdminDashboardMetrics {
+  currency: string;
+  total_sales: number;
+  total_sales_count: number;
+  orders_today: number;
+  pending_orders: number;
+  delivered_orders: number;
+  revenue: number;
+  average_order_value: number;
+  low_stock_count: number;
+  low_stock_products: AdminLowStockProduct[];
+  best_selling_products: AdminBestSellingProduct[];
+  status_breakdown: Array<{
+    status: string;
+    count: number;
+    total_amount: number;
+  }>;
+  recent_orders: AdminRecentOrderSummary[];
+  counts?: {
+    total_products: number;
+    total_customers: number;
+    pending_reviews: number;
+    active_shipments: number;
+  };
+}
+
+export interface AdminOrderRecord {
+  id: number;
+  order_number: string;
+  user_id?: number | null;
+  status: string;
+  payment_status: string;
+  fulfilment_status: string;
+  payment_method: string;
+  currency: string;
+  subtotal_amount: number;
+  discount_amount: number;
+  shipping_amount: number;
+  tax_amount: number;
+  total_amount: number;
+  coupon_code?: string | null;
+  shipping_method?: string | null;
+  shipping_address?: {
+    recipient_name?: string;
+    phone?: string;
+    division?: string;
+    district?: string;
+    upazila?: string;
+    address_line_1?: string;
+  } | null;
+  items?: Array<{
+    id: number;
+    product_id?: number | null;
+    product_variant_id?: number | null;
+    sku: string;
+    product_name: string;
+    color?: string | null;
+    size?: string | null;
+    quantity: number;
+    unit_price_amount: number;
+    line_total_amount: number;
+  }>;
+  status_histories?: Array<{
+    id: number;
+    from_status?: string | null;
+    to_status: string;
+    payment_status?: string | null;
+    fulfilment_status?: string | null;
+    actor_type: string;
+    notes?: string | null;
+    created_at: string;
+  }>;
+  placed_at?: string | null;
+  confirmed_at?: string | null;
+  shipped_at?: string | null;
+  delivered_at?: string | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+}
+
+export interface AdminPaymentTransaction {
+  id: number;
+  order_id: number;
+  order_number?: string | null;
+  order_status?: string | null;
+  merchant_reference: string;
+  gateway: string;
+  gateway_payment_id?: string | null;
+  gateway_transaction_id?: string | null;
+  amount: number;
+  refunded_amount: number;
+  currency: string;
+  status: string;
+  failure_reason?: string | null;
+  paid_at?: string | null;
+  failed_at?: string | null;
+  refunded_at?: string | null;
+  created_at?: string | null;
+  refunds?: Array<{
+    id: number;
+    amount: number;
+    status: string;
+    reason?: string | null;
+    gateway_refund_id?: string | null;
+    refunded_at?: string | null;
+  }>;
+}
+
+export interface AdminPaymentSummary {
+  total_paid_amount: number;
+  total_refunded_amount: number;
+  paid_count: number;
+  pending_count: number;
+  failed_count: number;
+}
+
+export interface AdminCustomerRecord {
+  id: number;
+  name: string;
+  email: string;
+  phone?: string | null;
+  status: 'active' | 'suspended' | 'inactive';
+  orders_count: number;
+  total_spent: number;
+  currency: string;
+  email_verified_at?: string | null;
+  last_login_at?: string | null;
+  created_at?: string | null;
+  recent_orders?: AdminRecentOrderSummary[];
+}
+
+export interface AdminCouponRecord {
+  id: number;
+  code: string;
+  description?: string | null;
+  type: 'percentage' | 'fixed_amount';
+  value: number;
+  min_order_amount: number;
+  max_discount_amount?: number | null;
+  usage_limit?: number | null;
+  usage_limit_per_user?: number | null;
+  used_count: number;
+  redemptions_count?: number;
+  currency: string;
+  starts_at?: string | null;
+  expires_at?: string | null;
+  is_active: boolean;
+  is_expired: boolean;
+  created_at?: string | null;
+}
+
+export interface AdminShipmentRecord {
+  id: number;
+  order_id: number;
+  order_number?: string | null;
+  courier: string;
+  consignment_id?: string | null;
+  tracking_number?: string | null;
+  status: string;
+  delivery_fee: number;
+  cod_amount: number;
+  cod_collected_amount?: number | null;
+  cod_reconciliation_status: string;
+  recipient_name?: string | null;
+  recipient_phone?: string | null;
+  recipient_division?: string | null;
+  recipient_district?: string | null;
+  shipped_at?: string | null;
+  delivered_at?: string | null;
+  returned_at?: string | null;
+  cancelled_at?: string | null;
+  tracking_events?: Array<{
+    id: number;
+    external_status: string;
+    internal_status: string;
+    description?: string | null;
+    location?: string | null;
+    occurred_at?: string | null;
+  }>;
+}
+
+export interface AdminReviewRecord {
+  id: number;
+  product_id: number;
+  product?: {
+    id: number;
+    name: string;
+    slug: string;
+  } | null;
+  user_id?: number | null;
+  order_id?: number | null;
+  reviewer_name: string;
+  reviewer_email?: string | null;
+  rating: number;
+  title?: string | null;
+  comment: string;
+  status: 'pending' | 'approved' | 'rejected';
+  is_verified_purchase: boolean;
+  moderation_notes?: string | null;
+  moderated_at?: string | null;
+  created_at?: string | null;
+}
+
+export interface AdminPlatformSetting {
+  id: number;
+  group: string;
+  key: string;
+  value: string | number | boolean | Record<string, unknown> | null;
+  type: 'string' | 'integer' | 'boolean' | 'json';
+  label: string;
+  description?: string | null;
+  is_public: boolean;
+  updated_at?: string | null;
+}
+
+export interface AdminComprehensiveReport {
+  metrics: AdminDashboardMetrics;
+  payment_method_breakdown: Array<{
+    payment_method: string;
+    orders_count: number;
+    total_amount: number;
+  }>;
+  daily_sales: Array<{
+    date: string;
+    orders_count: number;
+    total_sales: number;
+    revenue: number;
+  }>;
+}
+
 
 

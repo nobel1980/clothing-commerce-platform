@@ -22,6 +22,18 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { PaginationNav } from '@/components/shared/PaginationNav';
 import { StoreProviders } from '@/components/layout/StoreProviders';
+import type { AdminDashboardMetrics, AdminStaffUser } from '@clothing-commerce/types';
+import {
+  ADMIN_NAV_ITEMS,
+  AdminAuthProvider,
+  getPermittedNavItems,
+  userHasPermission,
+} from '@/features/admin/hooks/useAdminAuth';
+import { AdminShell } from '@/features/admin/components/AdminShell';
+import { ConfirmDialog } from '@/features/admin/components/AdminDataToolbar';
+import { DashboardOverviewView } from '@/features/admin/components/DashboardOverviewView';
+import { ProductsAdminView } from '@/features/admin/components/CatalogModulesView';
+import { UsersAndPermissionsAdminView } from '@/features/admin/components/ReportsSettingsUsersAdminView';
 
 function assertCondition(condition: unknown, message: string): void {
   if (!condition) {
@@ -455,6 +467,201 @@ export async function runStorefrontTestSuite(): Promise<{ passed: number; names:
     }
 
     names.push('Orders & payments contract: status normalisation, cancel rules, surfaced errors, no client prices');
+  }
+
+  // 9. Centralized Admin Dashboard: 14 modules, permission-aware menu, backend metrics, confirmation dialogs & audit trail
+  {
+    assertCondition(
+      ADMIN_NAV_ITEMS.length === 14,
+      'ADMIN_NAV_ITEMS must define all 14 centralized Admin Dashboard modules'
+    );
+
+    const superAdmin: AdminStaffUser = {
+      id: 1,
+      name: 'Super Administrator',
+      email: 'admin@clothing-commerce.test',
+      role: 'super_admin',
+      status: 'active',
+    };
+
+    const supportStaff: AdminStaffUser = {
+      id: 2,
+      name: 'Support Agent',
+      email: 'support@clothing-commerce.test',
+      role: 'customer_support',
+      status: 'active',
+      permissions: ['orders.view', 'customers.view', 'reviews.view'],
+    };
+
+    assertCondition(
+      getPermittedNavItems(superAdmin).length === 14,
+      'super_admin must have access to all 14 sidebar navigation modules'
+    );
+
+    const supportNavKeys = getPermittedNavItems(supportStaff).map((i) => i.key);
+    assertCondition(
+      supportNavKeys.includes('orders') &&
+        supportNavKeys.includes('customers') &&
+        supportNavKeys.includes('reviews') &&
+        !supportNavKeys.includes('products') &&
+        !supportNavKeys.includes('settings') &&
+        !supportNavKeys.includes('users'),
+      'Permission-aware menu must filter out unauthorized modules for customer_support'
+    );
+
+    assertCondition(
+      userHasPermission(superAdmin, 'settings.manage') &&
+        !userHasPermission(supportStaff, 'settings.manage'),
+      'userHasPermission must enforce granular RBAC permissions'
+    );
+
+    // Unauthorized access to Settings module renders 403 Access Restricted state
+    const forbiddenShellHtml = renderToStaticMarkup(
+      <AdminAuthProvider initialUser={supportStaff}>
+        <AdminShell requiredPermissions={['settings.view']} title="Settings">
+          <div>Secret Settings Content</div>
+        </AdminShell>
+      </AdminAuthProvider>
+    );
+    assertCondition(
+      forbiddenShellHtml.includes('403 Forbidden') &&
+        forbiddenShellHtml.includes('Access Restricted') &&
+        !forbiddenShellHtml.includes('Secret Settings Content'),
+      'AdminShell must block rendering when staff member lacks required module permission'
+    );
+
+    // Dashboard metrics view renders backend API metrics (Total Sales, Revenue, AOV, Orders Today, Pending, Delivered, Low-Stock, Best-Sellers)
+    const sampleMetrics: AdminDashboardMetrics = {
+      currency: 'BDT',
+      total_sales: 967000,
+      total_sales_count: 2,
+      orders_today: 2,
+      pending_orders: 1,
+      delivered_orders: 1,
+      revenue: 640000,
+      average_order_value: 483500,
+      low_stock_count: 1,
+      low_stock_products: [
+        {
+          inventory_item_id: 11,
+          product_id: 101,
+          product_name: 'Embroidered Cotton Panjabi',
+          product_variant_id: 501,
+          sku: 'PNJ-BLK-L',
+          color: 'Black',
+          size: 'L',
+          warehouse_id: 1,
+          warehouse_name: 'Dhaka Central Hub',
+          warehouse_code: 'DHK',
+          quantity_on_hand: 3,
+          quantity_reserved: 0,
+          available_quantity: 3,
+          low_stock_threshold: 5,
+          is_out_of_stock: false,
+        },
+      ],
+      best_selling_products: [
+        {
+          product_id: 101,
+          product_name: 'Embroidered Cotton Panjabi',
+          sku: 'PNJ-BLK-L',
+          total_quantity_sold: 3,
+          total_revenue: 960000,
+          orders_count: 2,
+          currency: 'BDT',
+        },
+      ],
+      status_breakdown: [{ status: 'delivered', count: 1, total_amount: 640000 }],
+      recent_orders: [
+        {
+          id: 1,
+          order_number: 'ORD-20261115-AAA111',
+          customer_name: 'Nadia Rahman',
+          status: 'delivered',
+          payment_status: 'paid',
+          fulfilment_status: 'delivered',
+          payment_method: 'bkash',
+          total_amount: 640000,
+          currency: 'BDT',
+        },
+      ],
+    };
+
+    const dashHtml = renderToStaticMarkup(
+      <AdminAuthProvider initialUser={superAdmin}>
+        <DashboardOverviewView initialMetrics={sampleMetrics} />
+      </AdminAuthProvider>
+    );
+    assertCondition(
+      dashHtml.includes('Total Sales') &&
+        dashHtml.includes('৳9,670.00') &&
+        dashHtml.includes('Revenue (Paid / Settled)') &&
+        dashHtml.includes('৳6,400.00') &&
+        dashHtml.includes('Average Order Value') &&
+        dashHtml.includes('৳4,835.00') &&
+        dashHtml.includes('Low-Stock Products') &&
+        dashHtml.includes('Best-Selling Products') &&
+        dashHtml.includes('Embroidered Cotton Panjabi') &&
+        dashHtml.includes('ORD-20261115-AAA111'),
+      'DashboardOverviewView must render all 8 required backend KPIs and product tables'
+    );
+
+    // Confirmation Dialog & Searchable Data Table with Export & Audit History
+    const dialogHtml = renderToStaticMarkup(
+      <ConfirmDialog
+        open={true}
+        title="Delete Product?"
+        description="This action is logged in the Audit Trail."
+        variant="destructive"
+        requireReason={true}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />
+    );
+    assertCondition(
+      dialogHtml.includes('role="alertdialog"') &&
+        dialogHtml.includes('Delete Product?'),
+      'ConfirmDialog must render accessible alertdialog modal'
+    );
+
+    const productsAdminHtml = renderToStaticMarkup(
+      <AdminAuthProvider initialUser={superAdmin}>
+        <ProductsAdminView initialProducts={[TEST_PRODUCT]} />
+      </AdminAuthProvider>
+    );
+    assertCondition(
+      productsAdminHtml.includes('Heavyweight Boxy Tee') &&
+        productsAdminHtml.includes('Export CSV') &&
+        productsAdminHtml.includes('+ New Product'),
+      'ProductsAdminView must render searchable table, CSV export, and management actions'
+    );
+
+    const governanceHtml = renderToStaticMarkup(
+      <AdminAuthProvider initialUser={superAdmin}>
+        <UsersAndPermissionsAdminView
+          initialUsers={[superAdmin, supportStaff]}
+          initialRoles={[{ id: 1, name: 'super_admin', permissions: ['users.manage'] }]}
+          initialAuditLogs={[
+            {
+              id: 99,
+              user_email: 'admin@clothing-commerce.test',
+              action: 'settings.updated',
+              created_at: '2026-11-15T01:00:00Z',
+            },
+          ]}
+        />
+      </AdminAuthProvider>
+    );
+    assertCondition(
+      governanceHtml.includes('Staff &amp; User Accounts') &&
+        governanceHtml.includes('Roles &amp; Permissions Matrix') &&
+        governanceHtml.includes('Audit History'),
+      'UsersAndPermissionsAdminView must render Staff Users, Roles & Permissions, and Audit History tabs'
+    );
+
+    names.push(
+      'Centralized Admin Dashboard: 14 modules, permission-aware sidebar, backend metrics, confirmation dialogs & audit history'
+    );
   }
 
   return { passed: names.length, names };
