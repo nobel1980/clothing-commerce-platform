@@ -5,14 +5,17 @@ import {
   formatMoney,
   buildCanonicalUrl,
   buildProductJsonLd,
+  serializeJsonLd,
 } from '@/lib/utils/format';
 import { apiRequest } from '@/lib/api/client';
 import {
   fetchCustomerOrders,
+  fetchOrderTracking,
   initiatePayment,
   isCancellableByCustomer,
   isOnlinePaymentMethod,
   normalizeOrder,
+  placeStoreOrder,
 } from '@/features/orders/api/ordersApi';
 import { ProductCard } from '@/features/catalog/components/ProductCard';
 import { ProductImageGallery } from '@/features/catalog/components/ProductImageGallery';
@@ -661,6 +664,185 @@ export async function runStorefrontTestSuite(): Promise<{ passed: number; names:
 
     names.push(
       'Centralized Admin Dashboard: 14 modules, permission-aware sidebar, backend metrics, confirmation dialogs & audit history'
+    );
+  }
+
+  // 10. Production Audit: JSON-LD XSS prevention & E2E Purchase Journey (Product -> Cart -> Checkout -> Order -> Payment -> Fulfilment -> Delivery)
+  {
+    const xssProduct: CatalogProduct = {
+      ...TEST_PRODUCT,
+      name: 'Kurta </script><script>alert("xss")</script>',
+      description: 'Evil </script><img src=x onerror=alert(1)>',
+    };
+    const rawJsonLd = buildProductJsonLd(
+      xssProduct,
+      'https://atelier.bd/products/kurta'
+    );
+    const serialized = serializeJsonLd(rawJsonLd);
+    assertCondition(
+      !serialized.includes('</script>') &&
+        !serialized.includes('<script>') &&
+        serialized.includes('\\u003c/script\\u003e'),
+      'serializeJsonLd must escape < and > to prevent JSON-LD script tag breakout XSS'
+    );
+
+    const originalFetch = globalThis.fetch;
+    const journeySteps: string[] = [];
+
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      journeySteps.push(`${method} ${url}`);
+
+      const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        });
+
+      if (url.endsWith('/checkout/orders') && method === 'POST') {
+        return json(
+          {
+            data: {
+              id: 'ord-e2e-1',
+              orderNumber: 'ORD-20261119-E2E001',
+              customerId: '1',
+              status: 'PENDING_PAYMENT',
+              payment_status: 'awaiting_payment',
+              payment_method: 'bkash',
+              items: [
+                {
+                  id: 'item-1',
+                  orderId: 'ord-e2e-1',
+                  variantId: '501',
+                  sku: 'TEE-BLK-M',
+                  productName: 'Heavyweight Boxy Tee',
+                  size: 'M',
+                  color: 'Black',
+                  quantity: 2,
+                  unitPrice: { amount: 185000, currency: 'BDT' },
+                  totalPrice: { amount: 370000, currency: 'BDT' },
+                },
+              ],
+              shippingAddress: {
+                fullName: 'Tariqul Islam',
+                addressLine1: 'House 44, Road 11',
+                city: 'Dhaka',
+                state: 'Dhaka',
+                postalCode: '1213',
+                country: 'BD',
+                phone: '01712345678',
+              },
+              total: { amount: 370000, currency: 'BDT' },
+              createdAt: '2026-11-19T06:00:00Z',
+              updatedAt: '2026-11-19T06:00:00Z',
+            },
+            idempotent_replay: false,
+          },
+          201
+        );
+      }
+
+      if (url.endsWith('/payments/initiate') && method === 'POST') {
+        return json(
+          {
+            data: {
+              transaction: {
+                status: 'pending',
+                merchant_reference: 'MREF-E2E-001',
+              },
+              redirect_url: 'https://sandbox.payment.bkash.com/pay/E2E001',
+            },
+            idempotent_replay: false,
+          },
+          201
+        );
+      }
+
+      if (url.endsWith('/orders/ORD-20261119-E2E001/tracking')) {
+        return json({
+          data: {
+            order_number: 'ORD-20261119-E2E001',
+            order_status: 'delivered',
+            fulfilment_status: 'delivered',
+            shipments: [
+              {
+                id: 77,
+                order_id: 1,
+                order_number: 'ORD-20261119-E2E001',
+                courier: 'pathao',
+                consignment_id: 'PT-E2E-778899',
+                status: 'delivered',
+                delivery_fee: 7000,
+                cod_amount: 0,
+                cod_reconciliation_status: 'not_applicable',
+                tracking_events: [
+                  {
+                    id: 1,
+                    external_status: 'Delivered',
+                    internal_status: 'delivered',
+                    description: 'Parcel delivered to recipient in Banani',
+                  },
+                ],
+              },
+            ],
+          },
+        });
+      }
+
+      return json({ data: [] });
+    }) as typeof fetch;
+
+    try {
+      const placedOrder = await placeStoreOrder({
+        idempotency_key: 'e2e-front-key-1',
+        items: [{ variant_id: 501, quantity: 2 }],
+        shipping_address: {
+          fullName: 'Tariqul Islam',
+          addressLine1: 'House 44, Road 11',
+          division: 'Dhaka',
+          district: 'Dhaka',
+          upazila_thana: 'Banani',
+          city: 'Dhaka',
+          state: 'Dhaka',
+          postalCode: '1213',
+          country: 'BD',
+          phone: '01712345678',
+        },
+        shipping_method: 'standard',
+        payment_method: 'bkash',
+      });
+
+      assertCondition(
+        placedOrder.orderNumber === 'ORD-20261119-E2E001' &&
+          placedOrder.status === 'pending_payment',
+        'E2E order placement must normalize status and return order number'
+      );
+
+      const paymentInit = await initiatePayment(
+        placedOrder.orderNumber,
+        'bkash',
+        'e2e-pay-key-1'
+      );
+      assertCondition(
+        paymentInit.merchantReference === 'MREF-E2E-001' &&
+          paymentInit.redirectUrl === 'https://sandbox.payment.bkash.com/pay/E2E001',
+        'E2E payment initiation must return gateway redirect URL'
+      );
+
+      const tracking = await fetchOrderTracking(placedOrder.orderNumber);
+      assertCondition(
+        tracking.order_status === 'delivered' &&
+          tracking.shipments[0]?.consignment_id === 'PT-E2E-778899' &&
+          tracking.shipments[0]?.status === 'delivered',
+        'E2E order tracking must return courier consignment and delivered status'
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    names.push(
+      'Production Audit: JSON-LD XSS prevention & E2E purchase journey (Product -> Cart -> Checkout -> Order -> Payment -> Fulfilment -> Delivery)'
     );
   }
 

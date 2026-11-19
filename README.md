@@ -399,6 +399,7 @@ The GitHub Actions pipeline at `.github/workflows/ci.yml` validates every pull r
 | [docs/api/shipping_api.md](./docs/api/shipping_api.md) | Shipping `CourierProvider` interface, Pathao/Steadfast/REDX adapters, tracking webhooks, COD reconciliation |
 | [docs/api/admin_dashboard_api.md](./docs/api/admin_dashboard_api.md) | Centralized 14-module Admin Dashboard, permission matrix, real-time metrics, CSV exports |
 | [docs/security/security-architecture.md](./docs/security/security-architecture.md) | Security framework, threat model, and defense-in-depth policies |
+| [docs/security/production_readiness_audit_report.md](./docs/security/production_readiness_audit_report.md) | Full 20-domain production-readiness audit, security remediations, and E2E purchase journey verification |
 | [docs/deployment/deployment-guide.md](./docs/deployment/deployment-guide.md) | Production deployment, container setup, and rollback instructions |
 | [docs/adr/](./docs/adr/) | Architectural Decision Records |
 
@@ -418,5 +419,5 @@ The GitHub Actions pipeline at `.github/workflows/ci.yml` validates every pull r
 | **08** | Admin Operations | Centralized 14-module Admin Dashboard, permission-aware menu, analytics, CSV export, audit trail | ✅ Complete |
 | **09** | Courier Integration | Pathao, Steadfast, REDX automated consignments, tracking, COD reconciliation, returned parcels | ✅ Complete |
 | **10** | Promotions & Reviews | Coupon validation & admin CRUD, verified customer reviews, ratings moderation | ✅ Complete |
-| **11** | Quality & Hardening | E2E test suites, security penetration review, load testing, performance tuning | 🔲 Planned |
+| **11** | Quality & Hardening | 20-domain production-readiness audit, E2E purchase journey, burst load & concurrency tests | ✅ Complete |
 | **12** | Production Launch | Automated deployment pipeline, database backup routines, monitoring, smoke tests | 🔲 Planned |

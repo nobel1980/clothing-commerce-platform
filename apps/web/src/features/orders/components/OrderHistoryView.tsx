@@ -7,8 +7,10 @@ import { useMutation, useQuery, useQueryClient } from '@/lib/query';
 import {
   cancelCustomerOrder,
   fetchCustomerOrders,
+  fetchOrderTracking,
   isCancellableByCustomer,
   normalizeOrder,
+  type OrderTrackingPayload,
 } from '@/features/orders/api/ordersApi';
 import { formatMoney } from '@/lib/utils/format';
 import { Alert } from '@/components/ui/alert';
@@ -65,6 +67,25 @@ export function humanizeStatus(value: string): string {
 function OrderCard({ order }: { order: Order }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = React.useState(false);
+  const [trackingOpen, setTrackingOpen] = React.useState(false);
+  const [trackingData, setTrackingData] = React.useState<OrderTrackingPayload | null>(null);
+  const [trackingLoading, setTrackingLoading] = React.useState(false);
+
+  const handleToggleTracking = async () => {
+    const nextOpen = !trackingOpen;
+    setTrackingOpen(nextOpen);
+    if (nextOpen && !trackingData) {
+      setTrackingLoading(true);
+      try {
+        const res = await fetchOrderTracking(order.orderNumber);
+        setTrackingData(res);
+      } catch {
+        // Handled gracefully
+      } finally {
+        setTrackingLoading(false);
+      }
+    }
+  };
 
   const cancelMutation = useMutation({
     mutationFn: () => cancelCustomerOrder(order.orderNumber, 'Cancelled by customer'),
@@ -121,11 +142,59 @@ function OrderCard({ order }: { order: Order }) {
             </div>
           ))}
         </div>
-        <div className="mt-2 rounded-md bg-muted p-3 text-xs text-muted">
-          <strong>Ship to:</strong> {order.shippingAddress.fullName},{' '}
-          {order.shippingAddress.addressLine1}, {order.shippingAddress.city}{' '}
-          {order.shippingAddress.postalCode} ({order.shippingAddress.phone})
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted p-3 text-xs text-muted">
+          <div>
+            <strong>Ship to:</strong> {order.shippingAddress.fullName},{' '}
+            {order.shippingAddress.addressLine1}, {order.shippingAddress.city}{' '}
+            {order.shippingAddress.postalCode} ({order.shippingAddress.phone})
+          </div>
+          {['shipped', 'delivered', 'returned'].includes(order.status) && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleToggleTracking()}
+            >
+              {trackingOpen ? 'Hide Tracking' : 'Track Shipment'}
+            </Button>
+          )}
         </div>
+
+        {trackingOpen && (
+          <div className="rounded-md border border-neutral-200 bg-white p-3 text-xs">
+            {trackingLoading ? (
+              <p className="text-neutral-500">Loading courier tracking timeline...</p>
+            ) : !trackingData || trackingData.shipments.length === 0 ? (
+              <p className="text-neutral-500">No courier consignment updates recorded yet.</p>
+            ) : (
+              trackingData.shipments.map((shipment) => (
+                <div key={shipment.id} className="space-y-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 font-semibold text-neutral-900">
+                    <span>
+                      Courier: {shipment.courier.toUpperCase()} · Consignment:{' '}
+                      {shipment.consignment_id || shipment.tracking_number || `#${shipment.id}`}
+                    </span>
+                    <Badge variant="secondary">{humanizeStatus(shipment.status)}</Badge>
+                  </div>
+                  {(shipment.tracking_events ?? []).map((ev) => (
+                    <div
+                      key={ev.id}
+                      className="flex items-center justify-between border-t border-neutral-100 pt-1 text-[11px] text-neutral-600"
+                    >
+                      <span>
+                        <strong>{humanizeStatus(ev.internal_status)}</strong> —{' '}
+                        {ev.description || ev.external_status}
+                      </span>
+                      <span className="font-mono text-neutral-400">
+                        {ev.occurred_at || ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        )}
 
         {cancelMutation.error && (
           <Alert variant="destructive" role="alert">

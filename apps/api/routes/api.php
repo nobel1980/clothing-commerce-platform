@@ -245,7 +245,7 @@ Route::prefix('inventory')->name('inventory.')->group(function () {
 // ─────────────────────────────────────────────────────────────────────────────
 // Cart — Guest & Customer Cart Management, Merging, Address & Coupon Selection
 // ─────────────────────────────────────────────────────────────────────────────
-Route::prefix('cart')->name('cart.')->group(function () {
+Route::prefix('cart')->name('cart.')->middleware('throttle:120,1')->group(function () {
     Route::get('/', [\App\Modules\Cart\Controllers\CartController::class, 'show'])
         ->name('show');
     Route::delete('/', [\App\Modules\Cart\Controllers\CartController::class, 'clear'])
@@ -263,6 +263,7 @@ Route::prefix('cart')->name('cart.')->group(function () {
     Route::post('address', [\App\Modules\Cart\Controllers\CartController::class, 'selectAddress'])
         ->name('address.store');
     Route::post('coupon', [\App\Modules\Cart\Controllers\CartController::class, 'applyCoupon'])
+        ->middleware('throttle:20,1')
         ->name('coupon.apply');
     Route::delete('coupon', [\App\Modules\Cart\Controllers\CartController::class, 'removeCoupon'])
         ->name('coupon.remove');
@@ -276,12 +277,16 @@ Route::prefix('cart')->name('cart.')->group(function () {
 // ─────────────────────────────────────────────────────────────────────────────
 Route::prefix('checkout')->name('checkout.')->group(function () {
     Route::post('quote', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'quote'])
+        ->middleware('throttle:60,1')
         ->name('quote');
     Route::post('validate-coupon', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'validateCoupon'])
+        ->middleware('throttle:20,1')
         ->name('validate-coupon');
     Route::post('shipping-rates', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'shippingRates'])
+        ->middleware('throttle:60,1')
         ->name('shipping-rates');
     Route::post('orders', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'placeOrder'])
+        ->middleware('throttle:30,1')
         ->name('orders.store');
     Route::get('orders/{orderNumber}', [\App\Modules\Checkout\Controllers\StoreCheckoutQuoteController::class, 'showOrder'])
         ->middleware('throttle:60,1')
