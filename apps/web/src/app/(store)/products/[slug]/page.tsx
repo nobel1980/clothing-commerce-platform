@@ -8,7 +8,11 @@ import { ProductVariantSelector } from '@/features/catalog/components/ProductVar
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ApiClientError } from '@/lib/api/client';
-import { buildCanonicalUrl, buildProductJsonLd } from '@/lib/utils/format';
+import {
+  buildCanonicalUrl,
+  buildProductJsonLd,
+  serializeJsonLd,
+} from '@/lib/utils/format';
 
 interface ProductDetailPageProps {
   params: Promise<{ slug: string }>;
@@ -77,10 +81,10 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
 
   return (
     <div className="store-container py-8">
-      {/* Schema.org Product Structured Data */}
+      {/* Schema.org Product Structured Data (XSS-safe serialized JSON-LD) */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
 
       {/* Breadcrumbs */}

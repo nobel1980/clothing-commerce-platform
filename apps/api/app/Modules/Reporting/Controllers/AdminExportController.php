@@ -304,13 +304,30 @@ class AdminExportController extends Controller
         $handle = fopen('php://temp', 'r+');
         fputcsv($handle, $headers);
         foreach ($rows as $row) {
-            fputcsv($handle, $row);
+            $sanitizedRow = array_map(fn ($cell) => $this->sanitizeCsvCell($cell), $row);
+            fputcsv($handle, $sanitizedRow);
         }
         rewind($handle);
         $csv = (string) stream_get_contents($handle);
         fclose($handle);
 
         return $csv;
+    }
+
+    /**
+     * Prevents CSV Formula Injection (CWE-1236) by neutralizing leading formula characters.
+     */
+    private function sanitizeCsvCell(mixed $value): mixed
+    {
+        if (!is_string($value) || $value === '') {
+            return $value;
+        }
+
+        if (in_array($value[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+            return "'" . $value;
+        }
+
+        return $value;
     }
 }
 

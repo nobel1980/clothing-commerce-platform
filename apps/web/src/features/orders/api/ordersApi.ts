@@ -1,4 +1,5 @@
 import type {
+  AdminShipmentRecord,
   Order,
   OrderStatus,
   PaymentGatewayId,
@@ -119,4 +120,25 @@ export async function cancelCustomerOrder(
     }
   );
   return normalizeOrder(response.data);
+}
+
+export interface OrderTrackingPayload {
+  order_number: string;
+  order_status: string;
+  fulfilment_status: string;
+  shipments: AdminShipmentRecord[];
+}
+
+export async function fetchOrderTracking(
+  orderNumber: string,
+  signal?: AbortSignal
+): Promise<OrderTrackingPayload> {
+  const response = await apiRequest<{ data: OrderTrackingPayload }>(
+    `/orders/${encodeURIComponent(orderNumber)}/tracking`,
+    {
+      isPrivate: true,
+      signal,
+    }
+  );
+  return response.data;
 }
