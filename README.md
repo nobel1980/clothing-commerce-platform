@@ -104,13 +104,13 @@ The backend is built around a **Modular Monolith** pattern inside `apps/api/app/
 | **Cart** | ✅ Complete | Guest & customer carts, merging, address & coupon selection | `/api/cart/*` |
 | **Checkout** | ✅ Complete | Backend-authoritative quotes, stock revalidation under row locks, idempotent order placement | `/api/checkout/*` |
 | **Orders** | ✅ Complete | Unique order numbers, item snapshots, status history, cancellation, customer history, admin lifecycle | `/api/orders/*`<br>`/api/admin/orders/*` |
-| **Payments** | ✅ Complete | `PaymentGateway` interface; bKash, Nagad, SSLCommerz, COD adapters; server-side verification; idempotent webhooks; refunds; redacted audit logs | `/api/payments/*`<br>`/api/webhooks/*` |
-| **Promotions** | 🟡 Partial | Coupon validation & discount calculation used by checkout (admin management planned) | `/api/checkout/validate-coupon` |
-| **Shipping** | 🟡 Partial | Bangladesh shipping-rate calculation (courier integration planned) | `/api/checkout/shipping-rates` |
-| **Customers** | 📋 Planned | Customer profiles, saved addresses, wishlists | `/api/customers/*` |
-| **Reviews** | 📋 Planned | Verified buyer reviews, star ratings, moderation workflows | `/api/reviews/*` |
+| **Payments** | ✅ Complete | `PaymentGateway` interface; bKash, Nagad, SSLCommerz, COD adapters; server-side verification; idempotent webhooks; refunds; redacted audit logs | `/api/payments/*`<br>`/api/admin/payments/*`<br>`/api/webhooks/*` |
+| **Promotions** | ✅ Complete | Coupon validation, discount calculation, redemptions, and admin coupon CRUD & toggles | `/api/checkout/validate-coupon`<br>`/api/admin/promotions/coupons/*` |
+| **Shipping** | ✅ Complete | `CourierProvider` interface; Pathao, Steadfast, REDX adapters; consignments, tracking webhooks, COD reconciliation, returned parcel stock restoration | `/api/orders/{orderNumber}/tracking`<br>`/api/admin/shipments/*`<br>`/api/webhooks/shipping/*` |
+| **Customers** | ✅ Complete | Customer profiles, saved addresses, order history, and admin directory & status controls | `/api/account/*`<br>`/api/admin/customers/*` |
+| **Reviews** | ✅ Complete | Verified buyer reviews, star ratings, storefront listing, and admin moderation workflow | `/api/catalog/products/{slug}/reviews`<br>`/api/admin/reviews/*` |
 | **Notifications** | 📋 Planned | Asynchronous transactional emails, SMS alerts, in-app notifications | Internal Queue |
-| **Reporting** | 📋 Planned | Sales summaries, revenue trends, inventory velocity read-models | `/api/admin/reports/*` |
+| **Reporting** | ✅ Complete | Real-time dashboard metrics, sales & revenue series, best-selling products, low-stock alerts, CSV exports | `/api/admin/dashboard/metrics`<br>`/api/admin/reports/*`<br>`/api/admin/export/*` |
 
 ---
 
@@ -396,6 +396,8 @@ The GitHub Actions pipeline at `.github/workflows/ci.yml` validates every pull r
 | [docs/database/database-design.md](./docs/database/database-design.md) | Relational database schema, ERD, and indexing strategies |
 | [docs/api/api_conventions.md](./docs/api/api_conventions.md) | REST API design conventions, status codes, and error payloads |
 | [docs/api/orders_and_payments_api.md](./docs/api/orders_and_payments_api.md) | Orders & Payments endpoints, status model, verification guarantees, gateway adapters |
+| [docs/api/shipping_api.md](./docs/api/shipping_api.md) | Shipping `CourierProvider` interface, Pathao/Steadfast/REDX adapters, tracking webhooks, COD reconciliation |
+| [docs/api/admin_dashboard_api.md](./docs/api/admin_dashboard_api.md) | Centralized 14-module Admin Dashboard, permission matrix, real-time metrics, CSV exports |
 | [docs/security/security-architecture.md](./docs/security/security-architecture.md) | Security framework, threat model, and defense-in-depth policies |
 | [docs/deployment/deployment-guide.md](./docs/deployment/deployment-guide.md) | Production deployment, container setup, and rollback instructions |
 | [docs/adr/](./docs/adr/) | Architectural Decision Records |
@@ -413,8 +415,8 @@ The GitHub Actions pipeline at `.github/workflows/ci.yml` validates every pull r
 | **05** | Storefront Portal | Customer catalog browsing, category tree, faceted filters, product details, SEO | ✅ Complete |
 | **06** | Cart & Checkout | Session & persistent cart, two-stage checkout, pricing engine, lock acquisition | ✅ Complete |
 | **07** | Orders & Payments | Order lifecycle state machine, bKash / Nagad / SSLCommerz / COD payment flows, webhooks | ✅ Complete |
-| **08** | Admin Operations | Backoffice catalog management, inventory adjustments, order fulfillment | 🔲 Planned |
-| **09** | Courier Integration | Pathao, Steadfast, REDX automated consignments, tracking, COD reconciliation | 🔲 Planned |
-| **10** | Promotions & Reviews | Coupon validation engine, customer reviews, ratings moderation, wishlists | 🔲 Planned |
+| **08** | Admin Operations | Centralized 14-module Admin Dashboard, permission-aware menu, analytics, CSV export, audit trail | ✅ Complete |
+| **09** | Courier Integration | Pathao, Steadfast, REDX automated consignments, tracking, COD reconciliation, returned parcels | ✅ Complete |
+| **10** | Promotions & Reviews | Coupon validation & admin CRUD, verified customer reviews, ratings moderation | ✅ Complete |
 | **11** | Quality & Hardening | E2E test suites, security penetration review, load testing, performance tuning | 🔲 Planned |
 | **12** | Production Launch | Automated deployment pipeline, database backup routines, monitoring, smoke tests | 🔲 Planned |

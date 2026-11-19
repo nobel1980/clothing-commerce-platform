@@ -62,6 +62,10 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Reports
             'reports.view',
+
+            // Settings
+            'settings.view',
+            'settings.manage',
         ];
 
         foreach ($permissions as $permissionName) {

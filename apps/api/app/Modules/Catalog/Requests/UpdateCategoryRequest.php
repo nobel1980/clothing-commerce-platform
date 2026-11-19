@@ -8,7 +8,7 @@ class UpdateCategoryRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->can('catalog.manage') || $this->user()?->isStaff();
+        return (bool) ($this->user()?->can('catalog.manage') || $this->user()?->isSuperAdmin());
     }
 
     public function rules(): array

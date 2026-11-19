@@ -72,6 +72,7 @@ export async function apiRequest<T>(
 
   const isPrivateEndpoint =
     isPrivate ||
+    cleanEndpoint.startsWith('/admin') ||
     cleanEndpoint.startsWith('/account') ||
     cleanEndpoint.startsWith('/auth') ||
     cleanEndpoint.startsWith('/checkout') ||
@@ -83,6 +84,21 @@ export async function apiRequest<T>(
     Accept: 'application/json',
     ...headers,
   };
+
+  if (
+    typeof window !== 'undefined' &&
+    cleanEndpoint.startsWith('/admin') &&
+    !requestHeaders['Authorization']
+  ) {
+    try {
+      const token = window.localStorage.getItem('ccp_admin_token');
+      if (token) {
+        requestHeaders['Authorization'] = `Bearer ${token}`;
+      }
+    } catch {
+      // Ignore storage access errors in restricted environments
+    }
+  }
 
   if (body !== undefined) {
     requestHeaders['Content-Type'] = 'application/json';
